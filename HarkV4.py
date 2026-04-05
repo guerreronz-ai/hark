@@ -16,42 +16,37 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Moderno y Profesional
+# CSS - Diseño Oscuro Profesional
 st.markdown("""
 <style>
-    /* Fondo principal oscuro premium */
     .main { background-color: #0a0f1c; }
     .stApp { background-color: #0a0f1c; }
     
-    /* Títulos */
     h1, h2, h3 {
         color: #00d4ff;
         font-weight: 600;
         letter-spacing: 0.5px;
     }
     
-    /* Sidebar elegante */
+    /* Sidebar */
     .sidebar .sidebar-content {
         background-color: #111827;
         border-right: 1px solid #1f2937;
     }
     
-    /* Botones principales */
+    /* Botones */
     .stButton>button {
         background: linear-gradient(90deg, #00b4d8, #0096b8);
         color: white;
         border-radius: 8px;
         height: 3.2em;
         font-weight: 600;
-        border: none;
-        transition: all 0.3s;
     }
     .stButton>button:hover {
         background: linear-gradient(90deg, #0096b8, #007a96);
-        transform: translateY(-2px);
     }
     
-    /* Expander */
+    /* Expander y contenedores */
     .stExpander {
         border-radius: 12px;
         border: 1px solid #1f2937;
@@ -61,7 +56,6 @@ st.markdown("""
     /* Dataframes */
     .dataframe {
         border-radius: 12px;
-        overflow: hidden;
         border: 1px solid #1f2937;
     }
     
@@ -69,23 +63,14 @@ st.markdown("""
     .stMetric {
         background-color: #111827;
         border-radius: 10px;
-        padding: 12px;
         border: 1px solid #1f2937;
     }
     
     /* Inputs */
-    .stTextInput>div>div>input, 
-    .stSelectbox>div>div>select,
-    .stTextArea>div>div>textarea {
+    .stTextInput input, .stSelectbox select, .stTextArea textarea {
         background-color: #1f2937;
         border: 1px solid #374151;
         color: #e2e8f0;
-        border-radius: 6px;
-    }
-    
-    /* Alertas y warnings */
-    .stAlert {
-        border-radius: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -204,9 +189,10 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
         return "#6c757d", "⚠️ Date Error", "-"
 
 
-# ==================== PÁGINAS (Tus versiones actuales) ====================
+# ==================== PÁGINAS ====================
 def login_page():
-    st.markdown("<h1 style='text-align:center; color:#1f77b4;'>🦈 HARK Login</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; color:#00d4ff;'>🦈 HARK Login</h1>", unsafe_allow_html=True)
+    
     with st.form("login_form"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -562,13 +548,13 @@ def main():
     if 'logged_in' not in st.session_state:
         login_page()
     else:
-        # Sidebar con estilo profesional
+        # Sidebar profesional
         st.sidebar.markdown(f"""
-        <div style='text-align:center; padding: 20px 0 10px 0;'>
-            <h1 style='color:#00d4ff; margin:0; font-size:2.2em;'>🦈 HARK</h1>
-            <p style='color:#94a3b8; margin:8px 0 0 0; font-size:1.05em;'>
+        <div style='text-align:center; padding: 20px 0;'>
+            <h1 style='color:#00d4ff; margin:0; font-size:2.4em;'>🦈 HARK</h1>
+            <p style='color:#94a3b8; margin:10px 0 0 0;'>
                 {st.session_state.full_name}<br>
-                <span style='color:#64748b; font-size:0.95em;'>{st.session_state.branch_name}</span>
+                <small style='color:#64748b;'>{st.session_state.branch_name}</small>
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -578,16 +564,11 @@ def main():
                 del st.session_state[k]
             st.rerun()
 
-        # Menú
-        if st.session_state.level >= 2:
-            menu_options = ["🚦 Ingress", "🏎️ Pending", "📊 Reports"]
-        else:
-            menu_options = ["🚦 Ingress", "🏎️ Pending"]
-
+        menu_options = ["🚦 Ingress", "🏎️ Pending", "📊 Reports"]
         if st.session_state.level == 3:
             menu_options.append("👤 Users")
 
-        menu = st.sidebar.radio("Menú", menu_options, label_visibility="collapsed")
+        menu = st.sidebar.radio("Menú", menu_options)
 
         if menu == "🚦 Ingress": page_ingress()
         elif menu == "🏎️ Pending": page_pending()
