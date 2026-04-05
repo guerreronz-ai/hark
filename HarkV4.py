@@ -167,29 +167,50 @@ SERVICES_LIST = [
 
 def get_status_info(service, reception_str, req_day_str, req_time_str):
     try:
+        # === HORA DE DALLAS (Central Time - CDT = UTC-5) ===
+        now_utc = datetime.utcnow()
+        now_dallas = now_utc - timedelta(hours=5)   # Hora de Dallas
+        
         rec_date = datetime.strptime(reception_str, "%Y-%m-%d %H:%M")
         req_date = datetime.strptime(f"{req_day_str} {req_time_str}", "%Y-%m-%d %H:%M")
-        now = datetime.now()
         
+        hours_until = (req_date - now_dallas).total_seconds() / 3600
+
         if service == "Full Detail for line":
-            hours = (now - rec_date).total_seconds() / 3600
-            if hours < 24: return "#28a745", "✅ On Time", f"{hours:.1f}h since reception"
-            elif hours < 48: return "#ffc107", "⚠️ Attention", f"{hours:.1f}h since reception"
-            else: return "#dc3545", "🚨 Delayed", f"{hours:.1f}h since reception"
+            hours_since = (now_dallas - rec_date).total_seconds() / 3600
+            if hours_since < 24:
+                return "#28a745", "✅ On Time", f"{hours_since:.1f}h since reception"
+            elif hours_since < 48:
+                return "#ffc107", "⚠️ Attention", f"{hours_since:.1f}h since reception"
+            else:
+                return "#dc3545", "🚨 Delayed", f"{hours_since:.1f}h since reception"
+        
         elif service in ["Full Detail the customer", "Zaktek"]:
-            hours = (req_date - now).total_seconds() / 3600
-            if hours >= 2: return "#28a745", "✅ Ample Time", f"{hours:.1f}h until deadline"
-            elif 1 <= hours < 2: return "#ffc107", "⚠️ Medium Time", f"{hours:.1f}h until deadline"
-            elif 0 <= hours < 1: return "#dc3545", "🚨 Critical", f"{hours:.1f}h until deadline"
-            else: return "#dc3545", "💀 Critical Delay", f"{hours:.1f}h until deadline"
+            if req_date.date() == now_dallas.date():           # Mismo día
+                if hours_until >= 1.0:                         # Más de 1 hora antes
+                    return "#28a745", "✅ Ample Time", f"{hours_until:.1f}h until deadline"
+                elif hours_until >= -0.5:                      # Hasta 30 minutos tarde
+                    return "#ffc107", "⚠️ Medium Time", f"{hours_until:.1f}h until deadline"
+                else:
+                    return "#dc3545", "🚨 Critical Delay", f"{hours_until:.1f}h until deadline"
+            else:                                              # Días futuros
+                if hours_until >= 2.0:
+                    return "#28a745", "✅ Ample Time", f"{hours_until:.1f}h until deadline"
+                elif hours_until >= 0:
+                    return "#ffc107", "⚠️ Medium Time", f"{hours_until:.1f}h until deadline"
+                else:
+                    return "#dc3545", "🚨 Critical Delay", f"{hours_until:.1f}h until deadline"
+        
         elif service in ["Sold use car", "Sold new car"]:
-            hours = (req_date - now).total_seconds() / 3600
-            if hours >= 1: return "#28a745", "✅ On Time (>1h)", f"{hours:.1f}h until deadline"
-            else: return "#dc3545", "🚨 Imminent (<1h)", f"{hours:.1f}h until deadline"
+            if hours_until >= 1.0:
+                return "#28a745", "✅ On Time (>1h)", f"{hours_until:.1f}h until deadline"
+            else:
+                return "#dc3545", "🚨 Imminent (<1h)", f"{hours_until:.1f}h until deadline"
+        
         return "#28a745", "✅ Normal", "-"
+    
     except:
         return "#6c757d", "⚠️ Date Error", "-"
-
 
 # ==================== PÁGINAS ====================
 def login_page():
