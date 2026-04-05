@@ -15,15 +15,11 @@ st.set_page_config(page_title="HARK - Management System", layout="wide", page_ic
 
 @contextmanager
 def get_db():
-    """PostgreSQL connection manager - Compatible con local y Render.com"""
+    """PostgreSQL connection manager - Compatible con local y Render"""
     conn = None
     try:
-        # 1. Para desarrollo local (usa .streamlit/secrets.toml)
-        if "DB" in st.secrets:
-            cfg = st.secrets["DB"]
-        
-        # 2. Para Render.com (usa variables de entorno)
-        else:
+        # === Prioridad 1: Variables de entorno (Render, Railway, etc.) ===
+        if os.getenv("DB_HOST"):
             cfg = {
                 "HOST": os.getenv("DB_HOST"),
                 "NAME": os.getenv("DB_NAME"),
@@ -31,10 +27,16 @@ def get_db():
                 "PASSWORD": os.getenv("DB_PASSWORD"),
                 "PORT": int(os.getenv("DB_PORT", 5432)),
             }
+        # === Prioridad 2: st.secrets (solo para desarrollo local) ===
+        elif "DB" in st.secrets:
+            cfg = st.secrets["DB"]
+        else:
+            st.error("❌ No se encontraron credenciales de base de datos.\nConfigura las variables de entorno en Render o el archivo secrets.toml localmente.")
+            st.stop()
 
-        # Validación importante
+        # Validación
         if not all([cfg.get("HOST"), cfg.get("NAME"), cfg.get("USER"), cfg.get("PASSWORD")]):
-            st.error("❌ Faltan credenciales de la base de datos.\nRevisa secrets.toml (local) o las variables en Render.")
+            st.error("❌ Faltan credenciales de la base de datos.")
             st.stop()
 
         conn = psycopg2.connect(
