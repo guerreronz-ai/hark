@@ -367,7 +367,7 @@ def page_reports():
     
     st.subheader("💾 Export Data")
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         pd.DataFrame({'Metric':['Total','Delivered','Pending','Urgent','Period'],'Value':[total,delivered,pending,urgent,title_period]}).to_excel(writer, sheet_name='Summary', index=False)
         df_all.to_excel(writer, sheet_name='All Vehicles', index=False)
         df_all.groupby('service').agg({'id':'count','is_urgent':'sum'}).reset_index().rename(columns={'id':'Total','is_urgent':'Urgent'}).to_excel(writer, sheet_name='By Service', index=False)
