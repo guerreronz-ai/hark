@@ -340,9 +340,6 @@ def page_reports():
         st.rerun()
 
     with get_db() as conn:
-        # Usar cursor normal en lugar de RealDictCursor
-        cursor = conn.cursor()
-        
         query = """
             SELECT 
                 v.tag_number,
@@ -360,12 +357,18 @@ def page_reports():
         conditions = []
         params = []
 
+        # 🔒 FILTRO DE SEGURIDAD: Solo el Admin (Nivel 3) ve todo
+        # Los Supervisores (2) y Agentes (1) ven solo su agencia
+        if st.session_state.level < 3:
+            conditions.append("v.branch_id = %s")
+            params.append(st.session_state.branch_id)
+
         if period == "Today":
             conditions.append("v.reception_date::date = CURRENT_DATE")
         elif period == "This Week":
-            conditions.append("v.reception_date::date >= DATE_TRUNC('week', CURRENT_DATE)")
+            conditions.append("v.reception_date >= DATE_TRUNC('week', CURRENT_DATE)")
         elif period == "This Month":
-            conditions.append("DATE_TRUNC('month', v.reception_date::timestamp) = DATE_TRUNC('month', CURRENT_DATE)")
+            conditions.append("DATE_TRUNC('month', v.reception_date) = DATE_TRUNC('month', CURRENT_DATE)")
 
         if status_filter != "All":
             conditions.append("v.status = %s")
@@ -380,15 +383,8 @@ def page_reports():
 
         query += " ORDER BY v.reception_date DESC"
 
-        # Ejecutar manualmente y crear DataFrame desde cero
-        cursor.execute(query, params if params else None)
-        rows = cursor.fetchall()
-        
-        # Crear DataFrame con los datos reales
-        df_all = pd.DataFrame(rows, columns=[
-            'tag_number', 'vin_number', 'service', 'status',
-            'reception_date', 'delivery_date', 'is_urgent', 'agency'
-        ])
+        # Ejecución de la consulta
+        df_all = pd.read_sql_query(query, conn, params=params if params else None)
 
     st.write(f"**Filas recuperadas:** {len(df_all)}")
 
@@ -396,8 +392,11 @@ def page_reports():
         st.warning("📭 No se encontraron vehículos.")
         return
 
-    # Renombrar columnas para visualización
-    df_display = df_all.rename(columns={
+    # Solución Robusta: Convertir a minúsculas primero para asegurar compatibilidad
+    df_display = df_all.copy()
+    df_display.columns = [col.lower() for col in df_display.columns]
+
+    df_display = df_display.rename(columns={
         'tag_number': 'TAG',
         'vin_number': 'VIN',
         'service': 'Service',
@@ -426,7 +425,6 @@ def page_reports():
     st.subheader("📋 Detailed List")
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    # Export Excel
     st.subheader("💾 Export Data")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -438,7 +436,7 @@ def page_reports():
         file_name=f"HARK_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
+    
 def page_users():
     st.markdown("<h2>👤 User Management</h2>", unsafe_allow_html=True)
 
