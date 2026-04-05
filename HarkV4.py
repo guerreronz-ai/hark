@@ -348,6 +348,9 @@ def page_reports():
         st.rerun()
 
     with get_db() as conn:
+        # Usar cursor normal (no RealDictCursor) para evitar conflictos con pandas
+        cursor = conn.cursor()
+        
         query = """
             SELECT 
                 v.tag_number,
@@ -385,7 +388,15 @@ def page_reports():
 
         query += " ORDER BY v.reception_date DESC"
 
-        df_all = pd.read_sql_query(query, conn, params=params if params else None)
+        # Ejecutar manualmente y crear DataFrame
+        cursor.execute(query, params if params else None)
+        rows = cursor.fetchall()
+        
+        # Crear DataFrame desde cero con los datos reales
+        df_all = pd.DataFrame(rows, columns=[
+            'tag_number', 'vin_number', 'service', 'status',
+            'reception_date', 'delivery_date', 'is_urgent', 'agency'
+        ])
 
     st.write(f"**Filas recuperadas:** {len(df_all)}")
 
@@ -393,11 +404,8 @@ def page_reports():
         st.warning("📭 No se encontraron vehículos.")
         return
 
-    # Solución Robusta: Convertir a minúsculas primero para asegurar compatibilidad
-    df_display = df_all.copy()
-    df_display.columns = [col.lower() for col in df_display.columns]
-
-    df_display = df_display.rename(columns={
+    # Crear df_display renombrando columnas
+    df_display = df_all.rename(columns={
         'tag_number': 'TAG',
         'vin_number': 'VIN',
         'service': 'Service',
