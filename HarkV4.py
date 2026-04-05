@@ -484,10 +484,12 @@ def page_reports():
 
 def page_users():
     st.markdown("<h2>👤 User Management</h2>", unsafe_allow_html=True)
+
     if st.session_state.level != 3:
         st.warning("🔒 Acceso denegado. Solo los Administradores pueden gestionar usuarios.")
         return
 
+    # === FORMULARIO PARA CREAR USUARIO ===
     with st.expander("➕ Agregar Nuevo Usuario", expanded=False):
         with st.form("create_user_form"):
             col1, col2, col3 = st.columns(3)
@@ -496,8 +498,7 @@ def page_users():
                 new_pass = st.text_input("Password", type="password")
             with col2:
                 new_fullname = st.text_input("Full Name", placeholder="John Doe")
-                new_level = st.selectbox("Access Level", [1, 2, 3], 
-                                       format_func=lambda x: {1: "👤 Agent", 2: "🛡️ Supervisor", 3: "👑 Admin"}[x])
+                new_level = st.selectbox("Access Level", [1, 2, 3], format_func=lambda x: {1: "👤 Agent", 2: "🛡️ Supervisor", 3: "👑 Admin"}[x])
             with col3:
                 with get_db() as conn:
                     c = conn.cursor()
@@ -527,12 +528,14 @@ def page_users():
     st.divider()
     st.subheader("📋 Usuarios Registrados")
 
+    # === LISTADO DE USUARIOS ===
     with get_db() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT u.id, u.username, u.level, u.full_name,
                    COALESCE(b.name, 'Global/Admin') as branch_name
-            FROM users u LEFT JOIN branches b ON u.branch_id = b.id
+            FROM users u
+            LEFT JOIN branches b ON u.branch_id = b.id
             ORDER BY u.level DESC, u.username
         """)
         users_data = c.fetchall()
@@ -541,6 +544,51 @@ def page_users():
         df = pd.DataFrame(users_data, columns=['id', 'username', 'level', 'full_name', 'branch_name'])
         df['level'] = df['level'].map({1: '👤 Agent', 2: '🛡️ Supervisor', 3: '👑 Admin'})
         st.dataframe(df, hide_index=True, use_container_width=True)
+
+        st.divider()
+        st.subheader("🔧 Gestión de Usuarios")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # === RESETEAR CONTRASEÑA ===
+            st.markdown("### 🔑 Restablecer Contraseña")
+            user_list = {f"{u['username']} ({u['full_name']})": u['id'] for u in users_data}
+            selected_user = st.selectbox("Seleccionar Usuario", list(user_list.keys()))
+            new_password = st.text_input("Nueva Contraseña", type="password", key="reset_pass")
+            
+            if st.button("🔄 Actualizar Contraseña", use_container_width=True):
+                if new_password:
+                    hashed = hashlib.sha256(new_password.encode()).hexdigest()
+                    user_id = user_list[selected_user]
+                    with get_db() as conn:
+                        c = conn.cursor()
+                        c.execute("UPDATE users SET password = %s WHERE id = %s", (hashed, user_id))
+                    st.success(f"✅ Contraseña actualizada para {selected_user}")
+                    st.rerun()
+                else:
+                    st.error("❌ Ingresa una contraseña")
+        
+        with col2:
+            # === ELIMINAR USUARIO ===
+            st.markdown("### 🗑️ Eliminar Usuario")
+            delete_list = {f"{u['username']} - {u['full_name']} (Nivel {u['level']})": u['id'] for u in users_data if u['id'] != st.session_state.user_id}
+            
+            if delete_list:
+                selected_delete = st.selectbox("Seleccionar Usuario a Eliminar", list(delete_list.keys()))
+                confirm_delete = st.checkbox("Confirmar eliminación", key="confirm_del")
+                
+                if st.button("🗑️ Eliminar Usuario", use_container_width=True, disabled=not confirm_delete):
+                    user_id = delete_list[selected_delete]
+                    with get_db() as conn:
+                        c = conn.cursor()
+                        c.execute("DELETE FROM users WHERE id = %s", (user_id,))
+                    st.success(f"✅ Usuario {selected_delete} eliminado")
+                    st.rerun()
+            else:
+                st.info("ℹ️ No hay otros usuarios para eliminar")
+    else:
+        st.info("📭 No hay usuarios registrados.")
 
 
 # ==================== MAIN ====================
