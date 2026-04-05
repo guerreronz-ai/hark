@@ -3,10 +3,12 @@ import psycopg2
 import psycopg2.extras
 import pandas as pd
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 import hashlib
 from contextlib import contextmanager
 from io import BytesIO
 import os
+
 
 # ==================== CONFIGURACIÓN VISUAL PROFESIONAL ====================
 st.set_page_config(
@@ -159,16 +161,16 @@ SERVICES_LIST = [
 
 def get_status_info(service, reception_str, req_day_str, req_time_str):
     try:
-        # === HORA DE DALLAS (Central Time - CDT = UTC-5) ===
-        now_utc = datetime.utcnow()
-        now_dallas = now_utc - timedelta(hours=5)   # Hora de Dallas
-        
-        rec_date = datetime.strptime(reception_str, "%Y-%m-%d %H:%M")
-        req_date = datetime.strptime(f"{req_day_str} {req_time_str}", "%Y-%m-%d %H:%M")
-        
+        # === HORA AUTOMÁTICA DE DALLAS (CST/CDT según temporada) ===
+        dallas_tz = ZoneInfo("America/Chicago")
+        now_dallas = datetime.now(dallas_tz)
+
+        rec_date = datetime.strptime(reception_str, "%Y-%m-%d %H:%M").replace(tzinfo=dallas_tz)
+        req_date = datetime.strptime(f"{req_day_str} {req_time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=dallas_tz)
+
         hours_until = (req_date - now_dallas).total_seconds() / 3600
 
-        if service == "Full Detail for line":
+        if service == "Full Detail for line ":
             hours_since = (now_dallas - rec_date).total_seconds() / 3600
             if hours_since < 24:
                 return "#28a745", "✅ On Time", f"{hours_since:.1f}h since reception"
@@ -177,7 +179,7 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
             else:
                 return "#dc3545", "🚨 Delayed", f"{hours_since:.1f}h since reception"
         
-        elif service in ["Full Detail the customer", "Zaktek"]:
+        elif service in ["Full Detail the customer ", "Zaktek "]:
             if req_date.date() == now_dallas.date():           # Mismo día
                 if hours_until >= 1.0:                         # Más de 1 hora antes
                     return "#28a745", "✅ Ample Time", f"{hours_until:.1f}h until deadline"
@@ -193,15 +195,15 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
                 else:
                     return "#dc3545", "🚨 Critical Delay", f"{hours_until:.1f}h until deadline"
         
-        elif service in ["Sold use car", "Sold new car"]:
+        elif service in ["Sold use car ", "Sold new car "]:
             if hours_until >= 1.0:
-                return "#28a745", "✅ On Time (>1h)", f"{hours_until:.1f}h until deadline"
+                return "#28a745", "✅ On Time ( >1h)", f"{hours_until:.1f}h until deadline"
             else:
-                return "#dc3545", "🚨 Imminent (<1h)", f"{hours_until:.1f}h until deadline"
+                return "#dc3545", "🚨 Imminent ( <1h)", f"{hours_until:.1f}h until deadline"
         
         return "#28a745", "✅ Normal", "-"
-    
-    except:
+
+    except Exception:
         return "#6c757d", "⚠️ Date Error", "-"
 
 # ==================== PÁGINAS ====================
