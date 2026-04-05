@@ -362,7 +362,9 @@ def page_reports():
         st.rerun()
 
     with get_db() as conn:
-        # AGREGAMOS marca y modelo al SELECT
+        # Usamos un cursor NORMAL (no RealDictCursor) para evitar conflictos con pandas
+        cursor = conn.cursor()
+        
         query = """
             SELECT 
                 v.tag_number,
@@ -382,7 +384,7 @@ def page_reports():
         conditions = []
         params = []
 
-        # Filtro de seguridad
+        # 🔒 FILTRO DE SEGURIDAD: Nivel 1 y 2 solo ven su agencia
         if st.session_state.level < 3:
             conditions.append("v.branch_id = %s")
             params.append(st.session_state.branch_id)
@@ -407,7 +409,15 @@ def page_reports():
 
         query += " ORDER BY v.reception_date DESC"
 
-        df_all = pd.read_sql_query(query, conn, params=params if params else None)
+        # Ejecución manual y creación segura del DataFrame
+        cursor.execute(query, params if params else None)
+        rows = cursor.fetchall()
+        
+        # Creamos el DataFrame desde cero con los nombres de columna exactos
+        df_all = pd.DataFrame(rows, columns=[
+            'tag_number', 'vin_number', 'marca', 'modelo', 'service', 
+            'status', 'reception_date', 'delivery_date', 'is_urgent', 'agency'
+        ])
 
     st.write(f"**Filas recuperadas:** {len(df_all)}")
 
@@ -415,16 +425,13 @@ def page_reports():
         st.warning("📭 No se encontraron vehículos.")
         return
 
-    # Solución Robusta: Convertir a minúsculas primero
+    # Copiamos y renombramos para la vista (Display)
     df_display = df_all.copy()
-    df_display.columns = [col.lower() for col in df_display.columns]
-
-    # Agregamos 'marca' y 'modelo' al renombrado
     df_display = df_display.rename(columns={
         'tag_number': 'TAG',
         'vin_number': 'VIN',
-        'marca': 'Brand',      # Nuevo
-        'modelo': 'Model',     # Nuevo
+        'marca': 'Brand',
+        'modelo': 'Model',
         'service': 'Service',
         'status': 'Status',
         'reception_date': 'Received',
@@ -451,7 +458,7 @@ def page_reports():
     st.subheader("📋 Detailed List")
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    # Export Excel (ahora incluirá las nuevas columnas automáticamente)
+    # Export Excel
     st.subheader("💾 Export Data")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
