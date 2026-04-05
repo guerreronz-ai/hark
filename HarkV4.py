@@ -8,17 +8,91 @@ from contextlib import contextmanager
 from io import BytesIO
 import os
 
-# ==================== CONFIGURACIÓN ====================
+# ==================== CONFIGURACIÓN VISUAL PROFESIONAL ====================
 st.set_page_config(
     page_title="HARK - Management System",
     layout="wide",
-    page_icon="🦈"
+    page_icon="🦈",
+    initial_sidebar_state="expanded"
 )
+
+# CSS Moderno y Profesional
+st.markdown("""
+<style>
+    /* Fondo principal oscuro premium */
+    .main { background-color: #0a0f1c; }
+    .stApp { background-color: #0a0f1c; }
+    
+    /* Títulos */
+    h1, h2, h3 {
+        color: #00d4ff;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Sidebar elegante */
+    .sidebar .sidebar-content {
+        background-color: #111827;
+        border-right: 1px solid #1f2937;
+    }
+    
+    /* Botones principales */
+    .stButton>button {
+        background: linear-gradient(90deg, #00b4d8, #0096b8);
+        color: white;
+        border-radius: 8px;
+        height: 3.2em;
+        font-weight: 600;
+        border: none;
+        transition: all 0.3s;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #0096b8, #007a96);
+        transform: translateY(-2px);
+    }
+    
+    /* Expander */
+    .stExpander {
+        border-radius: 12px;
+        border: 1px solid #1f2937;
+        background-color: #111827;
+    }
+    
+    /* Dataframes */
+    .dataframe {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #1f2937;
+    }
+    
+    /* Métricas */
+    .stMetric {
+        background-color: #111827;
+        border-radius: 10px;
+        padding: 12px;
+        border: 1px solid #1f2937;
+    }
+    
+    /* Inputs */
+    .stTextInput>div>div>input, 
+    .stSelectbox>div>div>select,
+    .stTextArea>div>div>textarea {
+        background-color: #1f2937;
+        border: 1px solid #374151;
+        color: #e2e8f0;
+        border-radius: 6px;
+    }
+    
+    /* Alertas y warnings */
+    .stAlert {
+        border-radius: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # ==================== BASE DE DATOS ====================
 @contextmanager
 def get_db():
-    """Gestor de conexión PostgreSQL - Compatible con local y Render"""
     conn = None
     try:
         if os.getenv("DB_HOST"):
@@ -60,49 +134,25 @@ def get_db():
         if conn:
             conn.close()
 
+
 def init_database():
-    """Crea tablas y datos iniciales solo si no existen (seguro)"""
     with get_db() as conn:
         c = conn.cursor()
-        
-        # Tablas
         c.execute('''CREATE TABLE IF NOT EXISTS branches (
-            id SERIAL PRIMARY KEY,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER DEFAULT 1
+            id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, active INTEGER DEFAULT 1
         )''')
-
         c.execute('''CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            level INTEGER NOT NULL,
-            full_name TEXT,
-            branch_id INTEGER REFERENCES branches(id)
+            id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL,
+            level INTEGER NOT NULL, full_name TEXT, branch_id INTEGER REFERENCES branches(id)
         )''')
-
         c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
-            id SERIAL PRIMARY KEY,
-            vin_number TEXT,
-            tag_number TEXT NOT NULL,
-            required_day TEXT NOT NULL,
-            required_time TEXT NOT NULL,
-            service TEXT NOT NULL,
-            responsible_name TEXT,
-            notes TEXT,
-            status TEXT DEFAULT 'Pending',
-            reception_date TEXT NOT NULL,
-            delivery_date TEXT,
-            handled_by TEXT,
-            is_urgent INTEGER DEFAULT 0,
-            branch_id INTEGER REFERENCES branches(id)
+            id SERIAL PRIMARY KEY, vin_number TEXT, tag_number TEXT NOT NULL,
+            marca TEXT, modelo TEXT, required_day TEXT NOT NULL, required_time TEXT NOT NULL,
+            service TEXT NOT NULL, responsible_name TEXT, notes TEXT, status TEXT DEFAULT 'Pending',
+            reception_date TEXT NOT NULL, delivery_date TEXT, handled_by TEXT,
+            is_urgent INTEGER DEFAULT 0, branch_id INTEGER REFERENCES branches(id)
         )''')
 
-        # 🔥 AGREGAR COLUMNAS NUEVAS (seguro - no da error si ya existen)
-        c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS marca TEXT;")
-        c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS modelo TEXT;")
-
-        # Datos iniciales solo si no existen
         c.execute("SELECT COUNT(*) as total FROM branches")
         if c.fetchone()['total'] == 0:
             c.execute("INSERT INTO branches (name) VALUES ('North Agency'), ('South Agency'), ('Central Agency')")
@@ -119,8 +169,8 @@ def init_database():
                 INSERT INTO users (username, password, level, full_name, branch_id) 
                 VALUES (%s, %s, %s, %s, %s)
             """, users_data)
-
         conn.commit()
+
 
 # ==================== CONSTANTES ====================
 SERVICES_LIST = [
@@ -139,26 +189,24 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
             if hours < 24: return "#28a745", "✅ On Time", f"{hours:.1f}h since reception"
             elif hours < 48: return "#ffc107", "⚠️ Attention", f"{hours:.1f}h since reception"
             else: return "#dc3545", "🚨 Delayed", f"{hours:.1f}h since reception"
-            
         elif service in ["Full Detail the customer", "Zaktek"]:
             hours = (req_date - now).total_seconds() / 3600
             if hours >= 2: return "#28a745", "✅ Ample Time", f"{hours:.1f}h until deadline"
             elif 1 <= hours < 2: return "#ffc107", "⚠️ Medium Time", f"{hours:.1f}h until deadline"
             elif 0 <= hours < 1: return "#dc3545", "🚨 Critical", f"{hours:.1f}h until deadline"
             else: return "#dc3545", "💀 Critical Delay", f"{hours:.1f}h until deadline"
-            
         elif service in ["Sold use car", "Sold new car"]:
             hours = (req_date - now).total_seconds() / 3600
             if hours >= 1: return "#28a745", "✅ On Time (>1h)", f"{hours:.1f}h until deadline"
             else: return "#dc3545", "🚨 Imminent (<1h)", f"{hours:.1f}h until deadline"
-            
         return "#28a745", "✅ Normal", "-"
     except:
         return "#6c757d", "⚠️ Date Error", "-"
 
-# ==================== PÁGINAS ====================
+
+# ==================== PÁGINAS (Tus versiones actuales) ====================
 def login_page():
-    st.markdown("<h1>🦈 HARK Login</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; color:#1f77b4;'>🦈 HARK Login</h1>", unsafe_allow_html=True)
     with st.form("login_form"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -191,9 +239,10 @@ def login_page():
                 else:
                     st.error("❌ Credenciales inválidas")
 
+
 def page_ingress():
     st.markdown("<h2>🚦 Vehicle Ingress</h2>", unsafe_allow_html=True)
-    st.info(f"📍 Agency: {st.session_state.branch_name} | 👤 {st.session_state.full_name}")
+    st.info(f"📍 Agency: **{st.session_state.branch_name}** | 👤 {st.session_state.full_name}")
     
     with st.form("ingress_form", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
@@ -236,7 +285,7 @@ def page_ingress():
                 
                 c.execute("""
                     INSERT INTO vehicles 
-                    (vin_number, tag_number, marca, modelo, required_day, required_time, service, notes, 
+                    (vin_number, tag_number, marca, modelo, required_day, required_time, service, notes,
                      is_urgent, branch_id, reception_date, status, responsible_name)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
@@ -258,27 +307,25 @@ def page_ingress():
             st.success(f"✅ {tag.upper()} registrado correctamente")
             st.rerun()
 
+
 def page_pending():
     st.markdown("<h2>🏎️ Pending Vehicles</h2>", unsafe_allow_html=True)
-    # Búsqueda
+    
     col1, col2 = st.columns([3, 1])
     with col1:
         search_term = st.text_input("🔍 Search by VIN or TAG Number", placeholder="Ej: ACURA0005")
     with col2:
-        st.button("Search") # Placeholder
+        st.button("Search")
 
     with get_db() as conn:
-        # FILTRO DE SEGURIDAD: Solo Admin ve todo
         where = "AND v.branch_id = %s " if st.session_state.level < 3 else ""
         params = (st.session_state.branch_id,) if st.session_state.level < 3 else ()
         
         c = conn.cursor()
-        # AGREGAMOS marca y modelo al SELECT
         c.execute(f"""
-            SELECT id, tag_number, vin_number, service, reception_date, 
-                   required_day, required_time, is_urgent, responsible_name,
-                   marca, modelo
-            FROM vehicles v 
+            SELECT id, tag_number, vin_number, marca, modelo, service, reception_date,
+                   required_day, required_time, is_urgent, responsible_name
+            FROM vehicles v
             WHERE v.status = 'Pending' {where}
             ORDER BY v.service, v.is_urgent DESC, v.reception_date ASC
         """, params)
@@ -302,22 +349,21 @@ def page_pending():
                 rows.append({
                     "TAG": v['tag_number'],
                     "VIN": v['vin_number'] or "-",
-                    "Marca": v['marca'] or "-",   # Nuevo campo
-                    "Modelo": v['modelo'] or "-", # Nuevo campo
+                    "Marca": v.get('marca') or "-",
+                    "Modelo": v.get('modelo') or "-",
                     "Responsible": v['responsible_name'] or "-",
                     "Required Day": v['required_day'],
                     "Required Time": v['required_time'],
                     "Received": v['reception_date'],
                     "Status": msg,
                     "Time": info,
-                    "Urgent": "🚨" if v['is_urgent'] else " ",
+                    "Urgent": "🚨" if v['is_urgent'] else "",
                     "_color": color,
                     "_id": v['id']
                 })
 
             df = pd.DataFrame(rows)
             
-            # Estilo visual
             styled_df = df.style.apply(
                 lambda row: [f'background-color: #111; color: #eee; border-left: 5px solid {row["_color"]}'] * len(row),
                 axis=1
@@ -325,14 +371,12 @@ def page_pending():
 
             st.dataframe(styled_df, hide_index=True, use_container_width=True)
 
-            # Botones de entrega
             cols = st.columns(len(vehs))
             for i, v in enumerate(vehs):
                 with cols[i]:
-                    # Mostramos Marca/Modelo en el botón para facilitar la entrega
                     label = f"✓ {v['tag_number']}"
-                    if v['marca']: label += f"\n({v['marca']} {v['modelo']})"
-                    
+                    if v.get('marca'):
+                        label += f" ({v.get('marca')} {v.get('modelo') or ''})"
                     if st.button(label, key=f"deliver_{v['id']}"):
                         with get_db() as conn2:
                             c2 = conn2.cursor()
@@ -346,6 +390,7 @@ def page_pending():
                                   st.session_state.username, v['id']))
                         st.success(f"✅ {v['tag_number']} entregado")
                         st.rerun()
+
 
 def page_reports():
     st.markdown("<h2>📊 Reports & Statistics</h2>", unsafe_allow_html=True)
@@ -362,29 +407,18 @@ def page_reports():
         st.rerun()
 
     with get_db() as conn:
-        # Usamos un cursor NORMAL (no RealDictCursor) para evitar conflictos con pandas
         cursor = conn.cursor()
-        
         query = """
             SELECT 
-                v.tag_number,
-                v.vin_number,
-                v.marca,
-                v.modelo,
-                v.service,
-                v.status,
-                v.reception_date,
-                v.delivery_date,
-                v.is_urgent,
+                v.tag_number, v.vin_number, v.marca, v.modelo, v.service,
+                v.status, v.reception_date, v.delivery_date, v.is_urgent,
                 COALESCE(b.name, 'Global/Admin') as agency
             FROM vehicles v
             LEFT JOIN branches b ON v.branch_id = b.id
         """
-
         conditions = []
         params = []
 
-        # 🔒 FILTRO DE SEGURIDAD: Nivel 1 y 2 solo ven su agencia
         if st.session_state.level < 3:
             conditions.append("v.branch_id = %s")
             params.append(st.session_state.branch_id)
@@ -399,7 +433,6 @@ def page_reports():
         if status_filter != "All":
             conditions.append("v.status = %s")
             params.append(status_filter)
-
         if service_filter != "All":
             conditions.append("v.service = %s")
             params.append(service_filter)
@@ -409,23 +442,18 @@ def page_reports():
 
         query += " ORDER BY v.reception_date DESC"
 
-        # Ejecución manual y creación segura del DataFrame
         cursor.execute(query, params if params else None)
         rows = cursor.fetchall()
         
-        # Creamos el DataFrame desde cero con los nombres de columna exactos
         df_all = pd.DataFrame(rows, columns=[
-            'tag_number', 'vin_number', 'marca', 'modelo', 'service', 
+            'tag_number', 'vin_number', 'marca', 'modelo', 'service',
             'status', 'reception_date', 'delivery_date', 'is_urgent', 'agency'
         ])
-
-    st.write(f"**Filas recuperadas:** {len(df_all)}")
 
     if df_all.empty:
         st.warning("📭 No se encontraron vehículos.")
         return
 
-    # Copiamos y renombramos para la vista (Display)
     df_display = df_all.copy()
     df_display = df_display.rename(columns={
         'tag_number': 'TAG',
@@ -442,43 +470,36 @@ def page_reports():
 
     df_display['Urgent'] = df_display['Urgent'].map({1: '🚨 Yes', 0: 'No'})
 
-    # KPIs
     total = len(df_display)
-    delivered = len(df_display[df_display['Status'] == 'Delivered'])
-    pending = len(df_display[df_display['Status'] == 'Pending'])
-    urgent = len(df_display[df_display['Urgent'] == '🚨 Yes'])
-
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Total Vehicles", total)
-    k2.metric("Delivered", delivered)
-    k3.metric("Pending", pending)
-    k4.metric("Urgent", urgent)
+    k2.metric("Delivered", len(df_display[df_display['Status'] == 'Delivered']))
+    k3.metric("Pending", len(df_display[df_display['Status'] == 'Pending']))
+    k4.metric("Urgent", len(df_display[df_display['Urgent'] == '🚨 Yes']))
 
     st.divider()
     st.subheader("📋 Detailed List")
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    # Export Excel
     st.subheader("💾 Export Data")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_all.to_excel(writer, sheet_name='Vehicles', index=False)
     output.seek(0)
     st.download_button(
-        label="📥 Download Excel", 
-        data=output, 
-        file_name=f"HARK_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", 
+        label="📥 Download Excel",
+        data=output,
+        file_name=f"HARK_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    
+
+
 def page_users():
     st.markdown("<h2>👤 User Management</h2>", unsafe_allow_html=True)
-
     if st.session_state.level != 3:
         st.warning("🔒 Acceso denegado. Solo los Administradores pueden gestionar usuarios.")
         return
 
-    # === FORMULARIO PARA CREAR USUARIO ===
     with st.expander("➕ Agregar Nuevo Usuario", expanded=False):
         with st.form("create_user_form"):
             col1, col2, col3 = st.columns(3)
@@ -487,7 +508,8 @@ def page_users():
                 new_pass = st.text_input("Password", type="password")
             with col2:
                 new_fullname = st.text_input("Full Name", placeholder="John Doe")
-                new_level = st.selectbox("Access Level", [1, 2, 3], format_func=lambda x: {1: "👤 Agent", 2: "🛡️ Supervisor", 3: "👑 Admin"}[x])
+                new_level = st.selectbox("Access Level", [1, 2, 3], 
+                                       format_func=lambda x: {1: "👤 Agent", 2: "🛡️ Supervisor", 3: "👑 Admin"}[x])
             with col3:
                 with get_db() as conn:
                     c = conn.cursor()
@@ -517,14 +539,12 @@ def page_users():
     st.divider()
     st.subheader("📋 Usuarios Registrados")
 
-    # === LISTADO DE USUARIOS ===
     with get_db() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT u.id, u.username, u.level, u.full_name,
                    COALESCE(b.name, 'Global/Admin') as branch_name
-            FROM users u
-            LEFT JOIN branches b ON u.branch_id = b.id
+            FROM users u LEFT JOIN branches b ON u.branch_id = b.id
             ORDER BY u.level DESC, u.username
         """)
         users_data = c.fetchall()
@@ -534,67 +554,31 @@ def page_users():
         df['level'] = df['level'].map({1: '👤 Agent', 2: '🛡️ Supervisor', 3: '👑 Admin'})
         st.dataframe(df, hide_index=True, use_container_width=True)
 
-        st.divider()
-        st.subheader("🔧 Gestión de Usuarios")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # === RESETEAR CONTRASEÑA ===
-            st.markdown("### 🔑 Restablecer Contraseña")
-            user_list = {f"{u['username']} ({u['full_name']})": u['id'] for u in users_data}
-            selected_user = st.selectbox("Seleccionar Usuario", list(user_list.keys()))
-            new_password = st.text_input("Nueva Contraseña", type="password", key="reset_pass")
-            
-            if st.button("🔄 Actualizar Contraseña", use_container_width=True):
-                if new_password:
-                    hashed = hashlib.sha256(new_password.encode()).hexdigest()
-                    user_id = user_list[selected_user]
-                    with get_db() as conn:
-                        c = conn.cursor()
-                        c.execute("UPDATE users SET password = %s WHERE id = %s", (hashed, user_id))
-                    st.success(f"✅ Contraseña actualizada para {selected_user}")
-                    st.rerun()
-                else:
-                    st.error("❌ Ingresa una contraseña")
-        
-        with col2:
-            # === ELIMINAR USUARIO ===
-            st.markdown("### 🗑️ Eliminar Usuario")
-            delete_list = {f"{u['username']} - {u['full_name']} (Nivel {u['level']})": u['id'] for u in users_data if u['id'] != st.session_state.user_id}
-            
-            if delete_list:
-                selected_delete = st.selectbox("Seleccionar Usuario a Eliminar", list(delete_list.keys()))
-                confirm_delete = st.checkbox("Confirmar eliminación", key="confirm_del")
-                
-                if st.button("🗑️ Eliminar Usuario", use_container_width=True, disabled=not confirm_delete):
-                    user_id = delete_list[selected_delete]
-                    with get_db() as conn:
-                        c = conn.cursor()
-                        c.execute("DELETE FROM users WHERE id = %s", (user_id,))
-                    st.success(f"✅ Usuario {selected_delete} eliminado")
-                    st.rerun()
-            else:
-                st.info("ℹ️ No hay otros usuarios para eliminar")
-    else:
-        st.info("📭 No hay usuarios registrados.")
 
 # ==================== MAIN ====================
 def main():
     init_database()
+
     if 'logged_in' not in st.session_state:
         login_page()
     else:
-        st.sidebar.title("🦈 HARK")
-        st.sidebar.write(f"👤 {st.session_state.full_name}")
-        st.sidebar.write(f"📍 {st.session_state.branch_name}")
-        
-        if st.sidebar.button("🚪 Logout", use_container_width=True):
+        # Sidebar con estilo profesional
+        st.sidebar.markdown(f"""
+        <div style='text-align:center; padding: 20px 0 10px 0;'>
+            <h1 style='color:#00d4ff; margin:0; font-size:2.2em;'>🦈 HARK</h1>
+            <p style='color:#94a3b8; margin:8px 0 0 0; font-size:1.05em;'>
+                {st.session_state.full_name}<br>
+                <span style='color:#64748b; font-size:0.95em;'>{st.session_state.branch_name}</span>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.rerun()
 
-        # Menú según nivel (Sin Dashboard)
+        # Menú
         if st.session_state.level >= 2:
             menu_options = ["🚦 Ingress", "🏎️ Pending", "📊 Reports"]
         else:
@@ -603,12 +587,13 @@ def main():
         if st.session_state.level == 3:
             menu_options.append("👤 Users")
 
-        menu = st.sidebar.radio("Menú", menu_options)
+        menu = st.sidebar.radio("Menú", menu_options, label_visibility="collapsed")
 
         if menu == "🚦 Ingress": page_ingress()
         elif menu == "🏎️ Pending": page_pending()
         elif menu == "📊 Reports": page_reports()
         elif menu == "👤 Users": page_users()
+
 
 if __name__ == "__main__":
     main()
