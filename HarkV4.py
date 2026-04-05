@@ -552,21 +552,22 @@ def main():
             st.rerun()
 
         # Menú según nivel
-        if st.session_state.level >= 2:
-            menu_options = ["🚦 Ingress", "🏎️ Pending", "📊 Reports"]
-        else:
-            menu_options = ["🚦 Ingress", "🏎️ Pending"]
+      if st.session_state.level >= 2:
+    # Agregamos la opción Dashboard aquí
+    menu_options = ["🚦 Ingress", "🏎️ Pending", "📊 Reports", "📈 Dashboard"]
+else:
+    menu_options = ["🚦 Ingress", "🏎️ Pending"]
 
         if st.session_state.level == 3:
             menu_options.append("👤 Users")
 
         menu = st.sidebar.radio("Menú", menu_options)
 
-        if menu == "🚦 Ingress": page_ingress()
-        elif menu == "🏎️ Pending": page_pending()
-        elif menu == "📊 Reports": page_reports()
-        elif menu == "👤 Users": page_users()
-
+    if menu == "🚦 Ingress": page_ingress()
+    elif menu == "🏎️ Pending": page_pending()
+    elif menu == "📊 Reports": page_reports()
+    elif menu == "📈 Dashboard": page_dashboard()  # <--- AGREGA ESTO
+    elif menu == "👤 Users": page_users()
 
 if __name__ == "__main__":
     main()
