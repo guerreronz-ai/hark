@@ -446,7 +446,70 @@ def page_reports():
         file_name=f"HARK_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+def page_dashboard():
+    st.markdown("<h2>📈 Dashboard de Rendimiento</h2>", unsafe_allow_html=True)
     
+    with get_db() as conn:
+        # 1. Query para obtener métricas globales por agencia
+        query_agency = """
+            SELECT 
+                COALESCE(b.name, 'Global/Admin') as agency,
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'Delivered' THEN 1 ELSE 0 END) as delivered,
+                SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as pending
+            FROM vehicles v
+            LEFT JOIN branches b ON v.branch_id = b.id
+            GROUP BY b.name
+            ORDER BY total DESC
+        """
+        df_agency = pd.read_sql_query(query_agency, conn)
+
+        # 2. Query para ver qué servicios son los más populares
+        query_services = """
+            SELECT service, COUNT(*) as count 
+            FROM vehicles 
+            GROUP BY service 
+            ORDER BY count DESC
+        """
+        df_services = pd.read_sql_query(query_services, conn)
+
+    if df_agency.empty:
+        st.info("📭 No hay datos suficientes para generar el dashboard.")
+        return
+
+    # === KPIs Globales (Parte Superior) ===
+    total_vehicles = df_agency['total'].sum()
+    total_delivered = df_agency['delivered'].sum()
+    total_pending = df_agency['pending'].sum()
+    
+    k1, k2, k3 = st.columns(3)
+    k1.metric("🚗 Total Vehicles", total_vehicles)
+    k2.metric("✅ Delivered", total_delivered)
+    k3.metric("⏳ Pending", total_pending)
+    
+    st.divider()
+    
+    # === Gráficos Visuales ===
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🏢 Rendimiento por Agencia")
+        # Configuramos el índice para que Streamlit lo use como eje X
+        df_chart_agency = df_agency.set_index('agency')
+        
+        # Mostramos gráfico de barras comparando Pendientes vs Entregados
+        st.bar_chart(df_chart_agency[['pending', 'delivered']])
+        
+    with col2:
+        st.subheader("🧼 Servicios Más Solicitados")
+        df_chart_svc = df_services.set_index('service')
+        st.bar_chart(df_chart_svc)
+
+    st.divider()
+    st.subheader("📊 Tabla de Resumen por Agencia")
+    st.dataframe(df_agency, use_container_width=True, hide_index=True)
+
 def page_users():
     st.markdown("<h2>👤 User Management</h2>", unsafe_allow_html=True)
     
