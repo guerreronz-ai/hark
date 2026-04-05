@@ -200,7 +200,7 @@ def page_ingress():
             current_hour = datetime.now().hour
             
            
-            default_day = today if current_hour < 22 else today + timedelta(days=1)
+            default_day = today if current_hour < 20 else today + timedelta(days=1)
             
             req_day = st.date_input(
                 "Required Day", 
