@@ -161,16 +161,23 @@ SERVICES_LIST = [
 
 def get_status_info(service, reception_str, req_day_str, req_time_str):
     try:
-        # === HORA AUTOMÁTICA DE DALLAS (CST/CDT según temporada) ===
+        # 1. LIMPIEZA DE SERVICIO (Para evitar errores de espacios)
+        service_clean = service.strip()
+        
+        # === HORA AUTOMÁTICA DE DALLAS (CST/CDT) ===
         dallas_tz = ZoneInfo("America/Chicago")
         now_dallas = datetime.now(dallas_tz)
 
+        # Parsear fechas
         rec_date = datetime.strptime(reception_str, "%Y-%m-%d %H:%M").replace(tzinfo=dallas_tz)
         req_date = datetime.strptime(f"{req_day_str} {req_time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=dallas_tz)
 
         hours_until = (req_date - now_dallas).total_seconds() / 3600
 
-        if service == "Full Detail for line ":
+        # --- LÓGICA DE NEGOCIO ---
+
+        # GRUPO A: Basado en HORAS DESDE RECESIÓN (Full Detail for line, Wash, Loaner, Photo)
+        if service_clean in ["Full Detail for line", "Service Wash", "Loaner", "Photo"]:
             hours_since = (now_dallas - rec_date).total_seconds() / 3600
             if hours_since < 24:
                 return "#28a745", "✅ On Time", f"{hours_since:.1f}h since reception"
@@ -179,11 +186,12 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
             else:
                 return "#dc3545", "🚨 Delayed", f"{hours_since:.1f}h since reception"
         
-        elif service in ["Full Detail the customer ", "Zaktek "]:
+        # GRUPO B: Basado en FECHA LÍMITE (Full Detail customer, Zaktek, Show Room)
+        elif service_clean in ["Full Detail the customer", "Zaktek", "Show Room"]:
             if req_date.date() == now_dallas.date():           # Mismo día
-                if hours_until >= 1.0:                         # Más de 1 hora antes
+                if hours_until >= 1.0:
                     return "#28a745", "✅ Ample Time", f"{hours_until:.1f}h until deadline"
-                elif hours_until >= -0.5:                      # Hasta 30 minutos tarde
+                elif hours_until >= -0.5:                      # Hasta 30 mins tarde
                     return "#ffc107", "⚠️ Medium Time", f"{hours_until:.1f}h until deadline"
                 else:
                     return "#dc3545", "🚨 Critical Delay", f"{hours_until:.1f}h until deadline"
@@ -195,16 +203,18 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
                 else:
                     return "#dc3545", "🚨 Critical Delay", f"{hours_until:.1f}h until deadline"
         
-        elif service in ["Sold use car ", "Sold new car "]:
+        # GRUPO C: Ventas (Sold use/new car)
+        elif service_clean in ["Sold use car", "Sold new car"]:
             if hours_until >= 1.0:
-                return "#28a745", "✅ On Time ( >1h)", f"{hours_until:.1f}h until deadline"
+                return "#28a745", "✅ On Time (>1h)", f"{hours_until:.1f}h until deadline"
             else:
-                return "#dc3545", "🚨 Imminent ( <1h)", f"{hours_until:.1f}h until deadline"
+                return "#dc3545", "🚨 Imminent (<1h)", f"{hours_until:.1f}h until deadline"
         
-        return "#28a745", "✅ Normal", "-"
+        # Fallback por si hay un servicio nuevo no contemplado
+        return "#28a745", "✅ Normal", f"{hours_until:.1f}h remaining"
 
-    except Exception:
-        return "#6c757d", "⚠️ Date Error", "-"
+    except Exception as e:
+        return "#6c757d", "⚠️ Error", "-"
 
 # ==================== PÁGINAS ====================
 def login_page():
