@@ -335,149 +335,105 @@ def page_reports():
     st.markdown("<h2>📊 Reports & Statistics</h2>", unsafe_allow_html=True)
     st.subheader("🔎 Filtros Avanzados")
 
-    # Obtener lista de agencias para el filtro
+    # Obtener agencias
     with get_db() as conn:
         c = conn.cursor()
         c.execute("SELECT name FROM branches WHERE active=1 ORDER BY name")
-        branches_list = [row['name'] for row in c.fetchall()]
-        branches_list.insert(0, "All Agencies")
+        branches = [row['name'] for row in c.fetchall()]
+        branches.insert(0, "All Agencies")
 
-    col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 2])
-
+    col1, col2, col3 = st.columns(3)
     with col1:
-        filter_type = st.selectbox("Período", 
-            ["Today", "Yesterday", "This Week", "Last Week", 
-             "This Month", "Last Month", "This Year", "Custom Range", "All Time"])
-    
+        period = st.selectbox("Período", ["All Time", "Today", "This Week", "This Month", "Custom Range"])
     with col2:
         status_filter = st.selectbox("Estado", ["All", "Pending", "Delivered"])
-    
     with col3:
-        branch_filter = st.selectbox("Agencia", branches_list)
-    
-    with col4:
-        service_filter = st.selectbox("Service", ["All"] + SERVICES_LIST)
-    
-    with col5:
-        start_date = st.date_input("Start Date", value=datetime.now().date() - timedelta(days=30))
-        end_date = st.date_input("End Date", value=datetime.now().date())
+        branch_filter = st.selectbox("Agencia", branches)
 
-    # Construcción de filtros SQL
-    if filter_type == "All Time":
-        date_filter = "1=1"
-        title_period = "All Time"
-    elif filter_type == "Custom Range":
-        date_filter = f"reception_date::date BETWEEN '{start_date}' AND '{end_date}'"
-        title_period = f"{start_date} to {end_date}"
+    if period == "Custom Range":
+        col4, col5 = st.columns(2)
+        with col4:
+            start_date = st.date_input("Start Date", datetime.now().date() - timedelta(days=30))
+        with col5:
+            end_date = st.date_input("End Date", datetime.now().date())
     else:
-        pg_filters = {
-            "Today": "reception_date::date = CURRENT_DATE",
-            "Yesterday": "reception_date::date = CURRENT_DATE - INTERVAL '1 day'",
-            "This Week": "reception_date::date >= DATE_TRUNC('week', CURRENT_DATE)",
-            "Last Week": "reception_date::date BETWEEN DATE_TRUNC('week', CURRENT_DATE - INTERVAL '7 days') AND DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '1 day'",
-            "This Month": "DATE_TRUNC('month', reception_date::timestamp) = DATE_TRUNC('month', CURRENT_DATE)",
-            "Last Month": "DATE_TRUNC('month', reception_date::timestamp) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')",
-            "This Year": "EXTRACT(YEAR FROM reception_date::timestamp) = EXTRACT(YEAR FROM CURRENT_DATE)",
-        }
-        date_filter = pg_filters.get(filter_type, "1=1")
-        title_period = filter_type
+        start_date = end_date = None
 
-    # Filtro por estado
-    status_condition = ""
-    if status_filter == "Pending":
-        status_condition = "AND status = 'Pending'"
-    elif status_filter == "Delivered":
-        status_condition = "AND status = 'Delivered'"
+    service_filter = st.selectbox("Service", ["All"] + SERVICES_LIST)
 
-    # Filtro por agencia
-    branch_condition = ""
-    branch_params = ()
-    if branch_filter != "All Agencies":
-        branch_condition = "AND b.name = %s"
-        branch_params = (branch_filter,)
-
-    # Filtro por servicio
-    service_condition = "AND service = %s" if service_filter != "All" else ""
-    service_params = (service_filter,) if service_filter != "All" else ()
-
-    # Combinar parámetros
-    params = service_params + branch_params
-
-    # Consulta principal
+    # ==================== CONSULTA SQL SIMPLIFICADA ====================
     with get_db() as conn:
+        if period == "All Time":
+            date_condition = "1=1"
+        elif period == "Today":
+            date_condition = "reception_date::date = CURRENT_DATE"
+        elif period == "This Week":
+            date_condition = "reception_date::date >= DATE_TRUNC('week', CURRENT_DATE)"
+        elif period == "This Month":
+            date_condition = "DATE_TRUNC('month', reception_date) = DATE_TRUNC('month', CURRENT_DATE)"
+        else:
+            date_condition = f"reception_date::date BETWEEN '{start_date}' AND '{end_date}'"
+
+        status_condition = ""
+        if status_filter == "Pending":
+            status_condition = "AND status = 'Pending'"
+        elif status_filter == "Delivered":
+            status_condition = "AND status = 'Delivered'"
+
+        branch_condition = ""
+        params = []
+        if branch_filter != "All Agencies":
+            branch_condition = "AND b.name = %s"
+            params.append(branch_filter)
+
+        if service_filter != "All":
+            service_condition = "AND v.service = %s"
+            params.append(service_filter)
+        else:
+            service_condition = ""
+
         query = f"""
-            SELECT v.*, COALESCE(b.name, 'Global/Admin') as branch_name 
+            SELECT v.*, COALESCE(b.name, 'Global/Admin') as branch_name
             FROM vehicles v
             LEFT JOIN branches b ON v.branch_id = b.id
-            WHERE {date_filter} {status_condition} {branch_condition} {service_condition}
-            ORDER BY v.reception_date DESC, v.required_day DESC
+            WHERE {date_condition} {status_condition} {branch_condition} {service_condition}
+            ORDER BY v.reception_date DESC
         """
-        df_all = pd.read_sql_query(query, conn, params=params)
-    
+
+        df_all = pd.read_sql_query(query, conn, params=params if params else None)
+
     if df_all.empty:
-        st.warning("📭 No se encontraron vehículos con los filtros seleccionados.")
+        st.error("No se encontraron vehículos. Prueba cambiando los filtros o selecciona 'All Time' + 'All'.")
+        st.info("Consejo: Prueba con 'All Time' y 'All' para ver todos los vehículos")
         return
 
     # KPIs
     total = len(df_all)
-    delivered = len(df_all[df_all['status'] == 'Delivered'])
-    pending = len(df_all[df_all['status'] == 'Pending'])
-    urgent = len(df_all[df_all['is_urgent'] == 1])
+    delivered = len(df_all[df_all['status']=='Delivered'])
+    pending = len(df_all[df_all['status']=='Pending'])
+    urgent = len(df_all[df_all['is_urgent']==1])
 
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    kpi1.metric("Total Vehicles", total)
-    kpi2.metric("Delivered", delivered, f"{(delivered/total*100):.1f}%" if total > 0 else "0%")
-    kpi3.metric("Pending", pending, f"{(pending/total*100):.1f}%" if total > 0 else "0%")
-    kpi4.metric("Urgent", urgent)
-
-    st.divider()
-
-    # Gráficos
-    col_chart1, col_chart2 = st.columns(2)
-    with col_chart1: 
-        st.subheader("📊 Vehicles by Service")
-        if not df_all.empty:
-            st.bar_chart(df_all['service'].value_counts())
-        
-    with col_chart2: 
-        st.subheader("📈 Daily Trend")
-        df_all['reception_date'] = pd.to_datetime(df_all['reception_date'], errors='coerce')
-        df_all = df_all.dropna(subset=['reception_date'])
-        df_all['date'] = df_all['reception_date'].dt.date
-        if not df_all.empty:
-            st.line_chart(df_all.groupby('date').size())
-
-    st.subheader("📋 Status Distribution")
-    st.bar_chart(df_all['status'].value_counts())
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Total", total)
+    k2.metric("Delivered", delivered)
+    k3.metric("Pending", pending)
+    k4.metric("Urgent", urgent)
 
     st.divider()
+
     st.subheader("📋 Detailed List")
-
-    disp = df_all[['tag_number', 'vin_number', 'service', 'status', 
-                   'reception_date', 'delivery_date', 'is_urgent', 'branch_name']].copy()
-    disp.columns = ['TAG', 'VIN', 'Service', 'Status', 'Received', 'Delivered', 'Urgent', 'Agency']
-    disp['Urgent'] = disp['Urgent'].map({1: '🚨 Yes', 0: 'No'})
-    
+    disp = df_all[['tag_number','vin_number','service','status','reception_date','delivery_date','is_urgent','branch_name']].copy()
+    disp.columns = ['TAG','VIN','Service','Status','Received','Delivered','Urgent','Agency']
+    disp['Urgent'] = disp['Urgent'].map({1:'🚨 Yes', 0:'No'})
     st.dataframe(disp, use_container_width=True, hide_index=True)
 
-    # Export Excel
+    # Export
     st.subheader("💾 Export Data")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        summary = pd.DataFrame({
-            'Metric': ['Total', 'Delivered', 'Pending', 'Urgent', 'Period', 'Agency'],
-            'Value': [total, delivered, pending, urgent, title_period, branch_filter]
-        })
-        summary.to_excel(writer, sheet_name='Summary', index=False)
-        df_all.to_excel(writer, sheet_name='All Vehicles', index=False)
-
+        df_all.to_excel(writer, sheet_name='Vehicles', index=False)
     output.seek(0)
-    st.download_button(
-        label="📥 Download Excel", 
-        data=output, 
-        file_name=f"HARK_Report_{datetime.now().strftime('%Y%m%d')}.xlsx", 
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    st.download_button("📥 Download Excel", data=output, file_name="HARK_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
  
 def page_users():
     st.markdown("<h2>👤 User Management</h2>", unsafe_allow_html=True)
