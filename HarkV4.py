@@ -318,8 +318,7 @@ def page_ingress():
 
 
 def page_pending():
-    st.markdown("<h2>🏎️ Pending Vehicles</h2>", unsafe_allow_html=True)
-    
+    st.markdown("\n🏎️ Pending Vehicles\n", unsafe_allow_html=True)
     col1, col2 = st.columns([3, 1])
     with col1:
         search_term = st.text_input("🔍 Search by VIN or TAG Number", placeholder="Ej: ACURA0005")
@@ -332,9 +331,10 @@ def page_pending():
         
         c = conn.cursor()
         c.execute(f"""
-            SELECT id, tag_number, vin_number, marca, modelo, service, reception_date,
-                   required_day, required_time, is_urgent, responsible_name
+            SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, b.name as agency_name,
+                   v.service, v.reception_date, v.required_day, v.required_time, v.is_urgent, v.responsible_name
             FROM vehicles v
+            LEFT JOIN branches b ON v.branch_id = b.id
             WHERE v.status = 'Pending' {where}
             ORDER BY v.service, v.is_urgent DESC, v.reception_date ASC
         """, params)
@@ -360,13 +360,14 @@ def page_pending():
                     "VIN": v['vin_number'] or "-",
                     "Marca": v.get('marca') or "-",
                     "Modelo": v.get('modelo') or "-",
+                    "Agency": v.get('agency_name') or "Global",
                     "Responsible": v['responsible_name'] or "-",
                     "Required Day": v['required_day'],
                     "Required Time": v['required_time'],
                     "Received": v['reception_date'],
                     "Status": msg,
                     "Time": info,
-                    "Urgent": "🚨" if v['is_urgent'] else "",
+                    "Urgent": "🚨" if v['is_urgent'] else " ",
                     "_color": color,
                     "_id": v['id']
                 })
@@ -396,10 +397,9 @@ def page_pending():
                                     handled_by = %s 
                                 WHERE id = %s
                             """, (datetime.now().strftime("%Y-%m-%d %H:%M"), 
-                                  st.session_state.username, v['id']))
+                                 st.session_state.username, v['id']))
                         st.success(f"✅ {v['tag_number']} entregado")
                         st.rerun()
-
 
 def page_reports():
     st.markdown("<h2>📊 Reports & Statistics</h2>", unsafe_allow_html=True)
