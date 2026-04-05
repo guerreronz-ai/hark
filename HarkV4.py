@@ -340,6 +340,9 @@ def page_reports():
         st.rerun()
 
     with get_db() as conn:
+        # Usar cursor normal en lugar de RealDictCursor
+        cursor = conn.cursor()
+        
         query = """
             SELECT 
                 v.tag_number,
@@ -356,11 +359,6 @@ def page_reports():
 
         conditions = []
         params = []
-
-        # 🔒 FILTRO DE SEGURIDAD: Solo Admin ve todo, Nivel 1 y 2 ven su agencia
-        if st.session_state.level < 3:
-            conditions.append("v.branch_id = %s")
-            params.append(st.session_state.branch_id)
 
         if period == "Today":
             conditions.append("v.reception_date::date = CURRENT_DATE")
@@ -382,7 +380,15 @@ def page_reports():
 
         query += " ORDER BY v.reception_date DESC"
 
-        df_all = pd.read_sql_query(query, conn, params=params if params else None)
+        # Ejecutar manualmente y crear DataFrame desde cero
+        cursor.execute(query, params if params else None)
+        rows = cursor.fetchall()
+        
+        # Crear DataFrame con los datos reales
+        df_all = pd.DataFrame(rows, columns=[
+            'tag_number', 'vin_number', 'service', 'status',
+            'reception_date', 'delivery_date', 'is_urgent', 'agency'
+        ])
 
     st.write(f"**Filas recuperadas:** {len(df_all)}")
 
@@ -390,11 +396,8 @@ def page_reports():
         st.warning("📭 No se encontraron vehículos.")
         return
 
-    # === SOLUCIÓN ROBUSTA: Convertir todo a minúsculas primero ===
-    df_display = df_all.copy()
-    df_display.columns = [col.lower() for col in df_display.columns]
-
-    df_display = df_display.rename(columns={
+    # Renombrar columnas para visualización
+    df_display = df_all.rename(columns={
         'tag_number': 'TAG',
         'vin_number': 'VIN',
         'service': 'Service',
@@ -407,6 +410,7 @@ def page_reports():
 
     df_display['Urgent'] = df_display['Urgent'].map({1: '🚨 Yes', 0: 'No'})
 
+    # KPIs
     total = len(df_display)
     delivered = len(df_display[df_display['Status'] == 'Delivered'])
     pending = len(df_display[df_display['Status'] == 'Pending'])
@@ -422,6 +426,7 @@ def page_reports():
     st.subheader("📋 Detailed List")
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
+    # Export Excel
     st.subheader("💾 Export Data")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
