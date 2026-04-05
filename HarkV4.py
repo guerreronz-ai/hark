@@ -8,76 +8,71 @@ from contextlib import contextmanager
 from io import BytesIO
 import os
 
-# ==================== CONFIGURACIÓN VISUAL ====================
+# ==================== CONFIGURACIÓN VISUAL PROFESIONAL ====================
 st.set_page_config(
-    st.session_state.theme = "dark"
     page_title="HARK - Management System",
     layout="wide",
     page_icon="🦈",
     initial_sidebar_state="expanded"
 )
 
-# CSS Mejorado - Respeta modo claro/oscuro
+# CSS Profesional - Modo Oscuro
 st.markdown("""
 <style>
-    /* Colores base según tema */
-    :root {
-        --primary-color: #00b4d8;
-    }
-    
-    /* Modo Oscuro (predeterminado y recomendado) */
-    .stApp[data-theme="dark"] {
-        background-color: #0a0f1c;
-    }
-    
-    /* Modo Claro */
-    .stApp[data-theme="light"] {
-        background-color: #f8fafc;
+    .stApp {
+        background-color: #0a0f1c !important;
     }
     
     h1, h2, h3 {
-        color: var(--primary-color);
+        color: #00d4ff !important;
         font-weight: 600;
     }
     
     /* Sidebar */
     .sidebar .sidebar-content {
-        background-color: #111827;
+        background-color: #111827 !important;
+        border-right: 1px solid #1f2937;
     }
     
     /* Botones */
     .stButton>button {
-        background: linear-gradient(90deg, #00b4d8, #0096b8);
-        color: white;
-        border-radius: 8px;
-        height: 3.2em;
-        font-weight: 600;
+        background: linear-gradient(90deg, #00b4d8, #0096b8) !important;
+        color: white !important;
+        border-radius: 8px !important;
+        height: 3.2em !important;
+        font-weight: 600 !important;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #0096b8, #007a96) !important;
     }
     
     /* Expander */
     .stExpander {
-        border-radius: 12px;
-        border: 1px solid #1f2937;
+        border-radius: 12px !important;
+        border: 1px solid #1f2937 !important;
+        background-color: #111827 !important;
     }
     
     /* Dataframes */
     .dataframe {
-        border-radius: 12px;
-        border: 1px solid #1f2937;
+        border-radius: 12px !important;
+        border: 1px solid #1f2937 !important;
     }
     
     /* Métricas */
     .stMetric {
-        background-color: #111827;
-        border-radius: 10px;
-        border: 1px solid #1f2937;
+        background-color: #111827 !important;
+        border-radius: 10px !important;
+        border: 1px solid #1f2937 !important;
     }
     
     /* Inputs */
-    .stTextInput input, .stSelectbox select, .stTextArea textarea {
-        background-color: #1f2937;
-        border: 1px solid #374151;
-        color: #e2e8f0;
+    .stTextInput input, 
+    .stSelectbox select, 
+    .stTextArea textarea {
+        background-color: #1f2937 !important;
+        border: 1px solid #374151 !important;
+        color: #e2e8f0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
