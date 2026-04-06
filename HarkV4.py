@@ -124,7 +124,6 @@ def init_database():
     with get_db() as conn:
         c = conn.cursor()
         
-        # 1. Crear tablas si no existen
         c.execute('''CREATE TABLE IF NOT EXISTS branches (
             id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, active INTEGER DEFAULT 1
         )''')
@@ -134,15 +133,14 @@ def init_database():
             level INTEGER NOT NULL, full_name TEXT, branch_id INTEGER REFERENCES branches(id)
         )''')
         
-        # NUEVA: Tabla de preferencias de usuario
+        # NUEVA: Tabla para guardar configuración de columnas por usuario
         c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (
-            id SERIAL PRIMARY KEY, 
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            preference_key TEXT NOT NULL,
-            preference_value TEXT,
+            id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            preference_key TEXT NOT NULL, preference_value TEXT,
             UNIQUE(user_id, preference_key)
         )''')
         
+        # ACTUALIZADA: required_day y required_time ahora permiten NULL
         c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
             id SERIAL PRIMARY KEY, vin_number TEXT, tag_number TEXT NOT NULL,
             marca TEXT, modelo TEXT, required_day TEXT, required_time TEXT,
@@ -151,17 +149,14 @@ def init_database():
             is_urgent INTEGER DEFAULT 0, branch_id INTEGER REFERENCES branches(id)
         )''')
 
-        # 2. Insertar Agencias por defecto si no existen
         c.execute("SELECT COUNT(*) as total FROM branches")
         if c.fetchone()['total'] == 0:
             c.execute("INSERT INTO branches (name) VALUES ('North Agency'), ('South Agency'), ('Central Agency')")
 
-        # 3. Insertar Usuarios por defecto si no existen
         c.execute("SELECT COUNT(*) as total FROM users")
         if c.fetchone()['total'] == 0:
             c.execute("SELECT id, name FROM branches")
             branches_map = {row['name']: row['id'] for row in c.fetchall()}
-            
             north_id = branches_map.get('North Agency')
             central_id = branches_map.get('Central Agency')
             south_id = branches_map.get('South Agency')
@@ -175,11 +170,7 @@ def init_database():
                 ('Super2', hashlib.sha256('Super123'.encode()).hexdigest(), 2, 'Supervisor Central', central_id),
                 ('Super3', hashlib.sha256('Super123'.encode()).hexdigest(), 2, 'Supervisor South', south_id),
             ]
-            
-            c.executemany("""
-                INSERT INTO users (username, password, level, full_name, branch_id) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, users_data)
+            c.executemany("""INSERT INTO users (username, password, level, full_name, branch_id) VALUES (%s, %s, %s, %s, %s)""", users_data)
         
         conn.commit()
 
@@ -188,7 +179,36 @@ SERVICES_LIST = [
     "Service Wash", "Loaner", "Photo", "Full Detail the customer",
     "Zaktek", "Show Room", "Full Detail for line", "Sold use car", "Sold new car"
 ]
+# ==================== CONFIGURACIÓN DE CAMPOS POR SERVICIO ====================
+SERVICE_FIELD_REQUIREMENTS = {
+    "Service Wash": "tag",
+    "Loaner": "tag",
+    "Photo": "vin",
+    "Full Detail the customer": "tag",  
+    "Zaktek": "both",
+    "Show Room": "vin",
+    "Full Detail for line": "vin",      
+    "Sold use car": "vin",
+    "Sold new car": "vin"
+}
+# ==================== FUNCIONES DE PREFERENCIAS DE USUARIO ====================
+def get_user_preference(user_id, key, default=None):
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute("SELECT preference_value FROM user_preferences WHERE user_id = %s AND preference_key = %s", (user_id, key))
+        res = c.fetchone()
+        return res['preference_value'].split(',') if res and res['preference_value'] else default
 
+def save_user_preference(user_id, key, value_list):
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO user_preferences (user_id, preference_key, preference_value)
+            VALUES (%s, %s, %s) ON CONFLICT (user_id, preference_key) 
+            DO UPDATE SET preference_value = EXCLUDED.preference_value
+        """, (user_id, key, ",".join(value_list)))
+        conn.commit()
+        
 def get_status_info(service, reception_str, req_day_str, req_time_str):
     try:
         service_clean = service.strip()
@@ -300,46 +320,62 @@ def page_ingress():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            vin = st.text_input("VIN Number", key="vin_in")
-            tag = st.text_input("TAG Number", key="tag_in")
+            service = st.selectbox("Service", SERVICES_LIST, key="service_sel")
+            req_type = SERVICE_FIELD_REQUIREMENTS.get(service, "both")
+            
+            vin_label = "VIN Number *" if req_type in ["vin", "both"] else "VIN Number (Opcional)"
+            tag_label = "TAG Number *" if req_type in ["tag", "both"] else "TAG Number (Opcional)"
+            
+            vin = st.text_input(vin_label, key="vin_in")
+            tag = st.text_input(tag_label, key="tag_in")
             marca = st.text_input("Marca (Brand)", key="marca_in", placeholder="Ej: Acura")
         
         with col2:
             modelo = st.text_input("Modelo (Model)", key="modelo_in", placeholder="Ej: MDX")
             responsible_name = st.text_input("Technical/Sales Man (Name)", key="res_name_in")
-            service = st.selectbox("Service", SERVICES_LIST)
         
         with col3:
             today = datetime.now().date()
             default_day = today if datetime.now().hour < 20 else today + timedelta(days=1)
             
-            # Solo mostrar Required Day/Time si NO es "Full Detail for line"
-            if service != "Full Detail for line":
+            # Ocultar fecha/hora solo para Full Detail for line
+            if service == "Full Detail for line":
+                req_day = None
+                req_time = None
+                st.info("ℹ️ *Full Detail for Line* no requiere fecha/hora específica.")
+            else:
                 req_day = st.date_input("Required Day", value=default_day, min_value=today, key="day_in")
                 req_time = st.time_input("Required Time", value=time(9, 0), key="time_in")
-            else:
-                req_day = None
-                req_time = time(9, 0)  # Valor por defecto
-                st.info("ℹ️ Full Detail for Line no requiere fecha/hora específica")
-            
+                
             notes = st.text_area("Notes", placeholder="Observations...", key="notes_in")
         
         urgent = st.checkbox("🚨 Mark as URGENT (Maximum Priority)")
         
         if st.form_submit_button("💾 Save Vehicle", use_container_width=True, type="primary"):
-            if not tag.strip():
-                st.error("❌ TAG Number is required")
+            # Validación dinámica
+            if req_type == "both" and (not vin.strip() or not tag.strip()):
+                st.error("❌ Este servicio requiere VIN y TAG")
                 st.stop()
+            elif req_type == "vin" and not vin.strip():
+                st.error("❌ Este servicio requiere VIN Number")
+                st.stop()
+            elif req_type == "tag" and not tag.strip():
+                st.error("❌ Este servicio requiere TAG Number")
+                st.stop()
+            
+            # Verificar duplicados según campo requerido
+            check_val = tag.strip().upper() if req_type in ["tag", "both"] else vin.strip().upper()
+            check_col = "tag_number" if req_type in ["tag", "both"] else "vin_number"
             
             with get_db() as conn:
                 c = conn.cursor()
-                c.execute("""
+                c.execute(f"""
                     SELECT id FROM vehicles 
-                    WHERE tag_number=%s AND service=%s AND branch_id=%s AND status='Pending'
-                """, (tag.strip().upper(), service, st.session_state.branch_id))
+                    WHERE {check_col}=%s AND service=%s AND branch_id=%s AND status='Pending'
+                """, (check_val, service, st.session_state.branch_id))
                 
                 if c.fetchone():
-                    st.error(f"❌ {tag.upper()} ya está en la cola para {service}")
+                    st.error(f"❌ {check_val} ya está registrado para {service}")
                     st.stop()
                 
                 c.execute("""
@@ -349,11 +385,11 @@ def page_ingress():
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
                     vin.strip().upper() if vin else None,
-                    tag.strip().upper(),
+                    tag.strip().upper() if tag else None,
                     marca.strip() if marca else None,
                     modelo.strip() if modelo else None,
                     req_day.strftime("%Y-%m-%d") if req_day else None,
-                    req_time.strftime("%H:%M") if service != "Full Detail for line" else None,
+                    req_time.strftime("%H:%M") if req_time else None,
                     service,
                     notes.strip(),
                     1 if urgent else 0,
@@ -363,7 +399,7 @@ def page_ingress():
                     responsible_name.strip()
                 ))
             
-            st.success(f"✅ {tag.upper()} registrado correctamente")
+            st.success(f"✅ Vehículo registrado correctamente")
             st.rerun()
             
 def page_pending():
