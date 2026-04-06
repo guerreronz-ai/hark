@@ -85,12 +85,12 @@ def get_db():
                 "PORT": int(os.getenv("DB_PORT", 5432)),
             }
           # ✅ AGREGA ESTA LÍNEA:
-        cursor.execute("SET TIME ZONE 'America/Chicago'")
-            try:
+       cursor.execute("SET TIME ZONE 'America/Chicago'")
+        try:
             yield conn
-            finally:
-        cursor.close()
-        conn.close()
+        finally:
+            cursor.close()
+             conn.close()
         
         elif "DB" in st.secrets:
             cfg = st.secrets["DB"]
