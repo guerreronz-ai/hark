@@ -84,7 +84,6 @@ def get_db():
                 "PASSWORD": os.getenv("DB_PASSWORD"),
                 "PORT": int(os.getenv("DB_PORT", 5432)),
             }
-              
         elif "DB" in st.secrets:
             cfg = st.secrets["DB"]
         else:
@@ -104,6 +103,11 @@ def get_db():
             cursor_factory=psycopg2.extras.RealDictCursor
         )
         conn.autocommit = False
+
+        # ✅ CONFIGURAR ZONA HORARIA (DALLAS, TX)
+        with conn.cursor() as temp_cursor:
+            temp_cursor.execute("SET TIME ZONE 'America/Chicago'")
+
         yield conn
         conn.commit()
 
@@ -116,14 +120,6 @@ def get_db():
         if conn:
             conn.close()
             
-       # ✅ AGREGA ESTA LÍNEA:
-    cursor.execute("SET TIME ZONE 'America/Chicago'")  # ← Misma indentación que la línea anterior
-    try:
-        yield conn
-    finally:
-        cursor.close()
-        conn.close() 
-
 def init_database():
     with get_db() as conn:
         c = conn.cursor()
