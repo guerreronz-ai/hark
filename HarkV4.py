@@ -376,6 +376,10 @@ def page_ingress():
                     st.error("❌ This service requires a TAG Number")
                     st.stop()
             
+            # ✅ OBTENER HORA DE DALLAS (NO UTC)
+            dallas_tz = ZoneInfo("America/Chicago")
+            dallas_now = datetime.now(dallas_tz).strftime("%Y-%m-%d %H:%M")
+            
             # Verificar duplicados según campo requerido
             check_val = (vin if req_type in ["vin", "both"] else tag).strip().upper()
             check_col = "vin_number" if req_type in ["vin", "both"] else "tag_number"
@@ -407,7 +411,7 @@ def page_ingress():
                     notes.strip(),
                     1 if urgent else 0,
                     st.session_state.branch_id,
-                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    dallas_now,  # ✅ Hora de Dallas, NO UTC
                     'Pending',
                     responsible_name.strip()
                 ))
