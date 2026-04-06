@@ -134,9 +134,18 @@ def init_database():
             level INTEGER NOT NULL, full_name TEXT, branch_id INTEGER REFERENCES branches(id)
         )''')
         
+        # NUEVA: Tabla de preferencias de usuario
+        c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (
+            id SERIAL PRIMARY KEY, 
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            preference_key TEXT NOT NULL,
+            preference_value TEXT,
+            UNIQUE(user_id, preference_key)
+        )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
             id SERIAL PRIMARY KEY, vin_number TEXT, tag_number TEXT NOT NULL,
-            marca TEXT, modelo TEXT, required_day TEXT NOT NULL, required_time TEXT NOT NULL,
+            marca TEXT, modelo TEXT, required_day TEXT, required_time TEXT,
             service TEXT NOT NULL, responsible_name TEXT, notes TEXT, status TEXT DEFAULT 'Pending',
             reception_date TEXT NOT NULL, delivery_date TEXT, handled_by TEXT,
             is_urgent INTEGER DEFAULT 0, branch_id INTEGER REFERENCES branches(id)
@@ -150,7 +159,6 @@ def init_database():
         # 3. Insertar Usuarios por defecto si no existen
         c.execute("SELECT COUNT(*) as total FROM users")
         if c.fetchone()['total'] == 0:
-            # Obtener IDs de agencias para asignar correctamente
             c.execute("SELECT id, name FROM branches")
             branches_map = {row['name']: row['id'] for row in c.fetchall()}
             
@@ -159,15 +167,10 @@ def init_database():
             south_id = branches_map.get('South Agency')
 
             users_data = [
-                # --- ADMIN GLOBAL (Nivel 3) ---
                 ('SuperSU', hashlib.sha256('Krieger1'.encode()).hexdigest(), 3, 'Administrator', None),
-                
-                # --- AGENTES (Nivel 1) ---
                 ('User1', hashlib.sha256('User123'.encode()).hexdigest(), 1, 'Agent North', north_id),
                 ('User2', hashlib.sha256('User123'.encode()).hexdigest(), 1, 'Agent Central', central_id),
                 ('User3', hashlib.sha256('User123'.encode()).hexdigest(), 1, 'Agent South', south_id),
-                
-                # --- SUPERVISORES (Nivel 2) ---
                 ('Super1', hashlib.sha256('Super123'.encode()).hexdigest(), 2, 'Supervisor North', north_id),
                 ('Super2', hashlib.sha256('Super123'.encode()).hexdigest(), 2, 'Supervisor Central', central_id),
                 ('Super3', hashlib.sha256('Super123'.encode()).hexdigest(), 2, 'Supervisor South', south_id),
@@ -227,6 +230,29 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
 
     except Exception:
         return "#6c757d", "⚠️ Error", "-"
+
+def get_user_preference(user_id, key, default=None):
+    """Obtener preferencia del usuario desde la BD"""
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute("""
+            SELECT preference_value FROM user_preferences 
+            WHERE user_id = %s AND preference_key = %s
+        """, (user_id, key))
+        result = c.fetchone()
+        return result['preference_value'] if result else default
+
+def save_user_preference(user_id, key, value):
+    """Guardar preferencia del usuario en la BD"""
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO user_preferences (user_id, preference_key, preference_value)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_id, preference_key) 
+            DO UPDATE SET preference_value = EXCLUDED.preference_value
+        """, (user_id, key, value))
+        conn.commit()
         
 # ==================== PÁGINAS ====================
 def login_page():
@@ -269,7 +295,7 @@ def login_page():
 def page_ingress():
     st.markdown("<h2>🚦 Vehicle Ingress</h2>", unsafe_allow_html=True)
     st.info(f"📍 Agency: **{st.session_state.branch_name}** | 👤 {st.session_state.full_name}")
-    
+
     with st.form("ingress_form", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
         
@@ -287,8 +313,15 @@ def page_ingress():
             today = datetime.now().date()
             default_day = today if datetime.now().hour < 20 else today + timedelta(days=1)
             
-            req_day = st.date_input("Required Day", value=default_day, min_value=today, key="day_in")
-            req_time = st.time_input("Required Time", value=time(9, 0), key="time_in")
+            # Solo mostrar Required Day/Time si NO es "Full Detail for line"
+            if service != "Full Detail for line":
+                req_day = st.date_input("Required Day", value=default_day, min_value=today, key="day_in")
+                req_time = st.time_input("Required Time", value=time(9, 0), key="time_in")
+            else:
+                req_day = None
+                req_time = time(9, 0)  # Valor por defecto
+                st.info("ℹ️ Full Detail for Line no requiere fecha/hora específica")
+            
             notes = st.text_area("Notes", placeholder="Observations...", key="notes_in")
         
         urgent = st.checkbox("🚨 Mark as URGENT (Maximum Priority)")
@@ -319,8 +352,8 @@ def page_ingress():
                     tag.strip().upper(),
                     marca.strip() if marca else None,
                     modelo.strip() if modelo else None,
-                    req_day.strftime("%Y-%m-%d"),
-                    req_time.strftime("%H:%M"),
+                    req_day.strftime("%Y-%m-%d") if req_day else None,
+                    req_time.strftime("%H:%M") if service != "Full Detail for line" else None,
                     service,
                     notes.strip(),
                     1 if urgent else 0,
@@ -332,7 +365,7 @@ def page_ingress():
             
             st.success(f"✅ {tag.upper()} registrado correctamente")
             st.rerun()
-
+            
 def page_pending():
     st.markdown("<h2>🏎️ Pending Vehicles</h2>", unsafe_allow_html=True)
     
