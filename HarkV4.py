@@ -9,7 +9,6 @@ from contextlib import contextmanager
 from io import BytesIO
 import os
 
-
 # ==================== CONFIGURACIÓN VISUAL PROFESIONAL ====================
 st.set_page_config(
     page_title="HARK - Management System",
@@ -20,55 +19,55 @@ st.set_page_config(
 
 # ==================== CSS Profesional - MODO CLARO ====================
 st.markdown("""
-    <style>
-    /* Fondo general suave */
-    .stApp {
-        background-color: #f4f6f9 !important;
-    }
-    
-    /* Títulos oscuros para contraste */
-    h1, h2, h3 {
-        color: #1e293b !important;
-        font-weight: 700;
-    }
-    
-    /* Sidebar blanca y limpia */
-    .sidebar .sidebar-content {
-        background-color: #ffffff !important;
-        border-right: 1px solid #e2e8f0 !important;
-    }
-    
-    /* Botones modernos azules */
-    .stButton>button {
-        background: linear-gradient(90deg, #2563eb, #1d4ed8) !important;
-        color: white !important;
-        border-radius: 6px !important;
-        font-weight: 600 !important;
-        border: none !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .stButton>button:hover {
-        background: linear-gradient(90deg, #1d4ed8, #1e40af) !important;
-    }
-    
-    /* Expanders (Cajas desplegables) */
-    .stExpander {
-        background-color: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 10px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    }
-    
-    /* Inputs y Selects */
-    .stTextInput input, 
-    .stSelectbox select, 
-    .stTextArea textarea {
-        background-color: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
-        border-radius: 6px !important;
-    }
-    </style>
+<style>
+/* Fondo general suave */
+.stApp {
+    background-color: #f4f6f9 !important;
+}
+
+/* Títulos oscuros para contraste */
+h1, h2, h3 {
+    color: #1e293b !important;
+    font-weight: 700;
+}
+
+/* Sidebar blanca y limpia */
+.sidebar .sidebar-content {
+    background-color: #ffffff !important;
+    border-right: 1px solid #e2e8f0 !important;
+}
+
+/* Botones modernos azules */
+.stButton>button {
+    background: linear-gradient(90deg, #2563eb, #1d4ed8) !important;
+    color: white !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    border: none !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.stButton>button:hover {
+    background: linear-gradient(90deg, #1d4ed8, #1e40af) !important;
+}
+
+/* Expanders (Cajas desplegables) */
+.stExpander {
+    background-color: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* Inputs y Selects */
+.stTextInput input, 
+.stSelectbox select, 
+.stTextArea textarea {
+    background-color: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+    border-radius: 6px !important;
+}
+</style>
 """, unsafe_allow_html=True)
 
 # ==================== BASE DE DATOS ====================
@@ -119,11 +118,12 @@ def get_db():
     finally:
         if conn:
             conn.close()
-            
+
 def init_database():
     with get_db() as conn:
         c = conn.cursor()
         
+        # 1. Crear tablas si no existen
         c.execute('''CREATE TABLE IF NOT EXISTS branches (
             id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, active INTEGER DEFAULT 1
         )''')
@@ -133,13 +133,14 @@ def init_database():
             level INTEGER NOT NULL, full_name TEXT, branch_id INTEGER REFERENCES branches(id)
         )''')
         
+        # NUEVA: Tabla para preferencias de usuario (columnas, etc.)
         c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (
             id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
             preference_key TEXT NOT NULL, preference_value TEXT,
             UNIQUE(user_id, preference_key)
         )''')
         
-        # ✅ ACTUALIZADO: Se eliminan NOT NULL para permitir VIN/TAG/Fechas opcionales
+        # ACTUALIZADA: Se eliminan NOT NULL para permitir VIN/TAG/Fechas opcionales
         c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
             id SERIAL PRIMARY KEY, vin_number TEXT, tag_number TEXT,
             marca TEXT, modelo TEXT, required_day TEXT, required_time TEXT,
@@ -157,10 +158,12 @@ def init_database():
         except Exception:
             pass  # Ya están actualizadas
 
+        # 2. Insertar Agencias por defecto si no existen
         c.execute("SELECT COUNT(*) as total FROM branches")
         if c.fetchone()['total'] == 0:
             c.execute("INSERT INTO branches (name) VALUES ('North Agency'), ('South Agency'), ('Central Agency')")
 
+        # 3. Insertar Usuarios por defecto si no existen
         c.execute("SELECT COUNT(*) as total FROM users")
         if c.fetchone()['total'] == 0:
             c.execute("SELECT id, name FROM branches")
@@ -178,7 +181,10 @@ def init_database():
                 ('Super2', hashlib.sha256('Super123'.encode()).hexdigest(), 2, 'Supervisor Central', central_id),
                 ('Super3', hashlib.sha256('Super123'.encode()).hexdigest(), 2, 'Supervisor South', south_id),
             ]
-            c.executemany("""INSERT INTO users (username, password, level, full_name, branch_id) VALUES (%s, %s, %s, %s, %s)""", users_data)
+            c.executemany("""
+                INSERT INTO users (username, password, level, full_name, branch_id) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, users_data)
         
         conn.commit()
 
@@ -214,42 +220,62 @@ def save_user_preference(user_id, key, value_list):
         c = conn.cursor()
         c.execute("""
             INSERT INTO user_preferences (user_id, preference_key, preference_value)
-            VALUES (%s, %s, %s) ON CONFLICT (user_id, preference_key) 
+            VALUES (%s, %s, %s) ON CONFLICT (user_id, preference_key)
             DO UPDATE SET preference_value = EXCLUDED.preference_value
         """, (user_id, key, ",".join(value_list)))
         conn.commit()
-        
+
+# ==================== FUNCIÓN DE ESTADO/COLORES ====================
 def get_status_info(service, reception_str, req_day_str, req_time_str):
     try:
-        service_clean = service.strip()
+        service_clean = service.strip() if service else ""
         dallas_tz = ZoneInfo("America/Chicago")
         now_dallas = datetime.now(dallas_tz)
-
-        rec_date = datetime.strptime(reception_str, "%Y-%m-%d %H:%M").replace(tzinfo=dallas_tz)
-        req_date = datetime.strptime(f"{req_day_str} {req_time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=dallas_tz)
-
-        hours_since_reception = (now_dallas - rec_date).total_seconds() / 3600
-        hours_until_deadline = (req_date - now_dallas).total_seconds() / 3600
-
-        # === FULL DETAIL FOR LINE ===
+        
+        # Parsear reception_date (manejar diferentes formatos y NULL)
+        if not reception_str:
+            return "#6c757d", "⚠️ No Date", "-"
+        
+        try:
+            rec_date = datetime.strptime(reception_str, "%Y-%m-%d %H:%M")
+            rec_date = rec_date.replace(tzinfo=dallas_tz)
+        except Exception:
+            return "#6c757d", "⚠️ Invalid Date", "-"
+        
+        # Si es "Full Detail for line", no requiere day/time
         if service_clean == "Full Detail for line":
+            hours_since_reception = (now_dallas - rec_date).total_seconds() / 3600
+            
             if hours_since_reception < 24:
                 return "#28a745", "✅ On Time", f"{hours_since_reception:.1f}h since reception"
             elif hours_since_reception < 48:
                 return "#ffc107", "⚠️ Attention", f"{hours_since_reception:.1f}h since reception"
             else:
                 return "#dc3545", "🚨 Delayed", f"{hours_since_reception:.1f}h since reception"
-
+        
+        # Para otros servicios que requieren day/time
+        if not req_day_str or not req_time_str:
+            return "#6c757d", "⚠️ No Deadline", "-"
+        
+        try:
+            req_date = datetime.strptime(f"{req_day_str} {req_time_str}", "%Y-%m-%d %H:%M")
+            req_date = req_date.replace(tzinfo=dallas_tz)
+        except Exception:
+            return "#6c757d", "⚠️ Invalid Deadline", "-"
+        
+        hours_since_reception = (now_dallas - rec_date).total_seconds() / 3600
+        hours_until_deadline = (req_date - now_dallas).total_seconds() / 3600
+        
         # === FULL DETAIL THE CUSTOMER, ZAKTEK, SOLD NEW CAR, SOLD USE CAR ===
-        elif service_clean in ["Full Detail the customer", "Zaktek", "Sold new car", "Sold use car"]:
+        if service_clean in ["Full Detail the customer", "Zaktek", "Sold new car", "Sold use car"]:
             if hours_until_deadline > 2.0:
                 return "#28a745", "✅ Ample Time", f"{hours_until_deadline:.1f}h until deadline"
             elif hours_until_deadline > 1.0:
                 return "#ffc107", "⚠️ Medium Time", f"{hours_until_deadline:.1f}h until deadline"
             else:
                 return "#dc3545", "🚨 Critical", f"{hours_until_deadline:.1f}h until deadline"
-
-        # Servicios restantes (Service Wash, Loaner, Photo, Show Room) - mantengo lógica anterior o la ajustas si quieres
+        
+        # Servicios restantes (Service Wash, Loaner, Photo, Show Room)
         else:
             if hours_since_reception < 24:
                 return "#28a745", "✅ On Time", f"{hours_since_reception:.1f}h since reception"
@@ -257,33 +283,10 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
                 return "#ffc107", "⚠️ Attention", f"{hours_since_reception:.1f}h since reception"
             else:
                 return "#dc3545", "🚨 Delayed", f"{hours_since_reception:.1f}h since reception"
-
-    except Exception:
+                
+    except Exception as e:
         return "#6c757d", "⚠️ Error", "-"
 
-def get_user_preference(user_id, key, default=None):
-    """Obtener preferencia del usuario desde la BD"""
-    with get_db() as conn:
-        c = conn.cursor()
-        c.execute("""
-            SELECT preference_value FROM user_preferences 
-            WHERE user_id = %s AND preference_key = %s
-        """, (user_id, key))
-        result = c.fetchone()
-        return result['preference_value'] if result else default
-
-def save_user_preference(user_id, key, value):
-    """Guardar preferencia del usuario en la BD"""
-    with get_db() as conn:
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO user_preferences (user_id, preference_key, preference_value)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (user_id, preference_key) 
-            DO UPDATE SET preference_value = EXCLUDED.preference_value
-        """, (user_id, key, value))
-        conn.commit()
-        
 # ==================== PÁGINAS ====================
 def login_page():
     st.markdown("<h1 style='text-align:center; color:#00d4ff;'>🦈 HARK Login</h1>", unsafe_allow_html=True)
@@ -418,14 +421,32 @@ def page_ingress():
             
             st.success("✅ Vehicle registered successfully")
             st.rerun()
+
 def page_pending():
     st.markdown("<h2>🏎️ Pending Vehicles</h2>", unsafe_allow_html=True)
     
-    # Mensaje superior según el nivel del usuario
     if st.session_state.level < 3:
         st.info(f"📍 Agency: **{st.session_state.branch_name}** | 👤 {st.session_state.full_name}")
     else:
         st.info(f"👑 Administrator Mode - Viendo todas las agencias | 👤 {st.session_state.full_name}")
+
+    # ==================== CONFIGURACIÓN DE COLUMNAS ====================
+    with st.expander("⚙️ Configurar Columnas", expanded=False):
+        st.write("Selecciona y ordena las columnas que deseas ver:")
+        available_cols = [
+            "TAG", "VIN", "Brand", "Model", "Agency", "Responsible", 
+            "Required Day", "Required Time", "Received", "Status", "Time Info", "Urgent"
+        ]
+        
+        saved_cols = get_user_preference(st.session_state.user_id, "pending_cols", 
+                                         default=["TAG", "VIN", "Brand", "Model", "Responsible", "Required Day", "Required Time", "Status", "Time Info"])
+        
+        selected_cols = st.multiselect("Columnas visibles", available_cols, default=saved_cols)
+        
+        if st.button("💾 Guardar Configuración"):
+            save_user_preference(st.session_state.user_id, "pending_cols", selected_cols)
+            st.success("✅ Configuración guardada")
+            st.rerun()
 
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -433,11 +454,10 @@ def page_pending():
     with col2:
         search_clicked = st.button("🔍 Search")
 
-    # ====================== CONSULTA A LA BASE DE DATOS ======================
     with get_db() as conn:
         c = conn.cursor()
         
-        if st.session_state.level < 3:   # Nivel 1 y 2 → Solo su agencia
+        if st.session_state.level < 3:
             base_query = """
                 SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, b.name as agency_name,
                        v.service, v.reception_date, v.required_day, v.required_time, 
@@ -447,7 +467,6 @@ def page_pending():
                 WHERE v.status = 'Pending' 
                   AND v.branch_id = %s
             """
-            # Agregar filtro de búsqueda si existe
             if search_term:
                 base_query += " AND (v.vin_number ILIKE %s OR v.tag_number ILIKE %s)"
                 params = (st.session_state.branch_id, f"%{search_term}%", f"%{search_term}%")
@@ -455,7 +474,7 @@ def page_pending():
                 params = (st.session_state.branch_id,)
             
             base_query += " ORDER BY v.service, v.is_urgent DESC, v.reception_date ASC"
-        else:                            # Nivel 3 (Admin) → Todas las agencias
+        else:
             base_query = """
                 SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, b.name as agency_name,
                        v.service, v.reception_date, v.required_day, v.required_time, 
@@ -464,7 +483,6 @@ def page_pending():
                 LEFT JOIN branches b ON v.branch_id = b.id
                 WHERE v.status = 'Pending'
             """
-            # Agregar filtro de búsqueda si existe
             if search_term:
                 base_query += " AND (v.vin_number ILIKE %s OR v.tag_number ILIKE %s)"
                 params = (f"%{search_term}%", f"%{search_term}%")
@@ -483,17 +501,14 @@ def page_pending():
             st.info("📭 No hay vehículos pendientes.")
         return
 
-    # ====================== AGRUPACIÓN POR SERVICIO ======================
     by_service = {}
     for v in all_v:
         by_service.setdefault(v['service'], []).append(v)
 
-    # ====================== MOSTRAR POR SERVICIO ======================
     for svc, vehs in by_service.items():
         with st.expander(f"**{svc}** — {len(vehs)} vehículo(s)", expanded=True):
             rows = []
             for v in vehs:
-                # Aplicamos las nuevas reglas de colores y mensajes
                 color, msg, info = get_status_info(
                     v['service'], 
                     v['reception_date'], 
@@ -504,31 +519,32 @@ def page_pending():
                 rows.append({
                     "TAG": v['tag_number'],
                     "VIN": v['vin_number'] or "-",
-                    "Marca": v.get('marca') or "-",
-                    "Modelo": v.get('modelo') or "-",
+                    "Brand": v.get('marca') or "-",
+                    "Model": v.get('modelo') or "-",
                     "Agency": v.get('agency_name') or "-",
                     "Responsible": v['responsible_name'] or "-",
-                    "Required Day": v['required_day'],
-                    "Required Time": v['required_time'],
+                    "Required Day": v['required_day'] or "-",
+                    "Required Time": v['required_time'] or "-",
                     "Received": v['reception_date'],
                     "Status": msg,
-                    "Time": info,
-                    "Urgent": "🚨" if v['is_urgent'] else " ",
+                    "Time Info": info,
+                    "Urgent": "🚨" if v['is_urgent'] else "",
                     "_color": color,
                     "_id": v['id']
                 })
 
             df = pd.DataFrame(rows)
             
-            # Estilo visual: barra de color a la izquierda según estado
+            # Filtrar y reordenar columnas según preferencias del usuario
+            cols_to_show = [col for col in selected_cols if col in df.columns] + ["_color", "_id"]
+            df_display = df[cols_to_show]
+            
             def highlight_status(row):
                 return [f'background-color: #ffffff; color: #333333; border-left: 5px solid {row["_color"]}'] * len(row)
 
-            styled_df = df.style.apply(highlight_status, axis=1).hide(["_color", "_id"], axis=1)
-
+            styled_df = df_display.style.apply(highlight_status, axis=1).hide(["_color", "_id"], axis=1)
             st.dataframe(styled_df, hide_index=True, use_container_width=True)
 
-            # ====================== BOTONES DE ENTREGA ======================
             cols = st.columns(len(vehs))
             for i, v in enumerate(vehs):
                 with cols[i]:
@@ -549,6 +565,7 @@ def page_pending():
                                   st.session_state.username, v['id']))
                         st.success(f"✅ {v['tag_number']} entregado correctamente")
                         st.rerun()
+
 def page_reports():
     # 🔒 Restricción de acceso - Solo niveles 2 y 3
     if st.session_state.level < 2:
@@ -559,7 +576,6 @@ def page_reports():
     st.markdown("<h2>📊 Reports & Statistics</h2>", unsafe_allow_html=True)
     st.subheader("🔎 Filtros Avanzados")
 
-    # Obtener lista de agencias para el filtro (solo visible para Admin)
     with get_db() as conn:
         c = conn.cursor()
         c.execute("SELECT id, name FROM branches WHERE active=1 ORDER BY name")
@@ -569,7 +585,6 @@ def page_reports():
     for b in branches:
         branch_opts[b['name']] = b['id']
 
-    # Layout de filtros (4 columnas)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         period = st.selectbox("Período", ["All Time", "Today", "This Week", "This Month"])
@@ -578,18 +593,15 @@ def page_reports():
     with col3:
         service_filter = st.selectbox("Servicio", ["All"] + SERVICES_LIST)
     with col4:
-        # Solo el Admin puede filtrar por agencia
         if st.session_state.level == 3:
             selected_agency = st.selectbox("🏢 Agency", list(branch_opts.keys()))
             branch_id_filter = branch_opts[selected_agency]
         else:
-            # Nivel 2 solo ve su propia agencia
             branch_id_filter = st.session_state.branch_id
 
     if st.button("🔄 Actualizar Reportes", type="primary"):
         st.rerun()
 
-    # ====================== CONSULTA A LA BASE DE DATOS ======================
     with get_db() as conn:
         cursor = conn.cursor()
         query = """
@@ -603,12 +615,10 @@ def page_reports():
         conditions = []
         params = []
 
-        # Filtro de agencia
         if branch_id_filter is not None:
             conditions.append("v.branch_id = %s")
             params.append(branch_id_filter)
 
-        # Filtros de tiempo
         if period == "Today":
             conditions.append("v.reception_date::date = CURRENT_DATE")
         elif period == "This Week":
@@ -616,7 +626,6 @@ def page_reports():
         elif period == "This Month":
             conditions.append("DATE_TRUNC('month', v.reception_date::timestamp) = DATE_TRUNC('month', CURRENT_DATE)")
 
-        # Filtros de estado y servicio
         if status_filter != "All":
             conditions.append("v.status = %s")
             params.append(status_filter)
@@ -641,7 +650,6 @@ def page_reports():
         st.warning("📭 No se encontraron vehículos con los filtros aplicados.")
         return
 
-    # ====================== PREPARACIÓN DEL DATAFRAME PARA MOSTRAR ======================
     df_display = df_all.copy()
     df_display = df_display.rename(columns={
         'tag_number': 'TAG',
@@ -658,7 +666,6 @@ def page_reports():
 
     df_display['Urgent'] = df_display['Urgent'].map({1: '🚨 Yes', 0: 'No'})
 
-    # Métricas
     total = len(df_display)
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Total Vehicles", total)
@@ -670,7 +677,6 @@ def page_reports():
     st.subheader("📋 Detailed List")
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    # ====================== EXPORTAR A EXCEL ======================
     st.subheader("💾 Export Data")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -684,14 +690,13 @@ def page_reports():
     )
 
     # ==========================================
-    # 🔁 NUEVA FUNCIÓN: REVERTIR ENTREGAS (Solo Nivel >= 2)
+    # 🔁 FUNCIÓN: REVERTIR ENTREGAS (Solo Nivel >= 2)
     # ==========================================
     if st.session_state.level >= 2:
         st.divider()
         st.subheader("↩️ Revertir Entregas (Corrección de Errores)")
         st.caption("⚠️ Esta acción regresará el vehículo a 'Pending' y limpiará la fecha de entrega.")
 
-        # Consulta específica para vehículos entregados
         rev_query = """
             SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, v.service, 
                    v.delivery_date, v.handled_by, b.name as agency
@@ -702,7 +707,6 @@ def page_reports():
         rev_conditions = []
         rev_params = []
 
-        # Si es supervisor, solo muestra entregas de su sucursal
         if st.session_state.level == 2:
             rev_conditions.append("v.branch_id = %s")
             rev_params.append(st.session_state.branch_id)
@@ -710,7 +714,6 @@ def page_reports():
         if rev_conditions:
             rev_query += " WHERE " + " AND ".join(rev_conditions)
         
-        # Limitamos a las últimas 100 entregas para optimizar rendimiento
         rev_query += " ORDER BY v.delivery_date DESC LIMIT 100"
 
         with get_db() as conn:
@@ -723,7 +726,6 @@ def page_reports():
             display_df = rev_df[['tag_number', 'marca', 'modelo', 'service', 'agency', 'handled_by', 'delivery_date']]
             st.dataframe(display_df, hide_index=True, use_container_width=True)
 
-            # Selector seguro para revertir
             vehicle_options = {
                 f"{v['tag_number']} | {v['marca']} {v['modelo']} (Entregado: {v['delivery_date']})": v['id'] 
                 for v in delivered_list
@@ -736,7 +738,6 @@ def page_reports():
                 vid = vehicle_options[selected_vehicle]
                 with get_db() as conn2:
                     c2 = conn2.cursor()
-                    # Regresa a Pending y limpia datos de entrega
                     c2.execute("""
                         UPDATE vehicles 
                         SET status = 'Pending', 
@@ -748,15 +749,14 @@ def page_reports():
                 st.rerun()
         else:
             st.info("📭 No hay vehículos entregados recientemente para revertir.")
-    
+
 def page_users():
     st.markdown("<h2>👤 User Management</h2>", unsafe_allow_html=True)
-
+    
     if st.session_state.level != 3:
         st.warning("🔒 Acceso denegado. Solo los Administradores pueden gestionar usuarios.")
         return
 
-    # === FORMULARIO PARA CREAR USUARIO ===
     with st.expander("➕ Agregar Nuevo Usuario", expanded=False):
         with st.form("create_user_form"):
             col1, col2, col3 = st.columns(3)
@@ -795,7 +795,6 @@ def page_users():
     st.divider()
     st.subheader("📋 Usuarios Registrados")
 
-    # === LISTADO DE USUARIOS ===
     with get_db() as conn:
         c = conn.cursor()
         c.execute("""
@@ -818,7 +817,6 @@ def page_users():
         col1, col2 = st.columns(2)
         
         with col1:
-            # === RESETEAR CONTRASEÑA ===
             st.markdown("### 🔑 Restablecer Contraseña")
             user_list = {f"{u['username']} ({u['full_name']})": u['id'] for u in users_data}
             selected_user = st.selectbox("Seleccionar Usuario", list(user_list.keys()))
@@ -837,7 +835,6 @@ def page_users():
                     st.error("❌ Ingresa una contraseña")
         
         with col2:
-            # === ELIMINAR USUARIO ===
             st.markdown("### 🗑️ Eliminar Usuario")
             delete_list = {f"{u['username']} - {u['full_name']} (Nivel {u['level']})": u['id'] for u in users_data if u['id'] != st.session_state.user_id}
             
@@ -857,15 +854,13 @@ def page_users():
     else:
         st.info("📭 No hay usuarios registrados.")
 
-
 # ==================== MAIN ====================
 def main():
     init_database()
-
+    
     if 'logged_in' not in st.session_state:
         login_page()
     else:
-        # Sidebar profesional
         st.sidebar.markdown(f"""
         <div style='text-align:center; padding: 20px 0;'>
             <h1 style='color:#00d4ff; margin:0; font-size:2.4em;'>🦈 HARK</h1>
@@ -881,10 +876,9 @@ def main():
                 del st.session_state[k]
             st.rerun()
 
-               # Menú según nivel de usuario
         menu_options = ["🚦 Ingress", "🏎️ Pending"]
 
-        if st.session_state.level >= 2:          # Nivel 2 y 3 ven Reports
+        if st.session_state.level >= 2:
             menu_options.append("📊 Reports")
 
         if st.session_state.level == 3:
@@ -896,7 +890,6 @@ def main():
         elif menu == "🏎️ Pending": page_pending()
         elif menu == "📊 Reports": page_reports()
         elif menu == "👤 Users": page_users()
-
 
 if __name__ == "__main__":
     main()
