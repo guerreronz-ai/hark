@@ -970,29 +970,28 @@ def main():
         page_public_ingress_level0()
         return
 
-    # === LÓGICA NORMAL DE LOGIN (como ya la tienes) ===
     if 'logged_in' not in st.session_state:
         login_page()
     else:
-        # ... (todo tu código actual del sidebar y menú)
-        st.sidebar.markdown(...)  # tu sidebar actual
+       
+        st.sidebar.markdown(...)  
 
         if st.sidebar.button("🚪 Sign Out", use_container_width=True):
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.rerun()
 
-        # ... resto del menú
 
+# ==================== MAIN ====================
 def main():
     init_database()
 
-    # ==================== MODO PÚBLICO NIVEL 0 (Guest) ====================
+    # ==================== MODO PÚBLICO NIVEL 0 (Guest / Sin Login) ====================
     if st.session_state.get("guest_mode", False):
-        page_public_ingress_level0()   # ← Función del ingreso público
-        return   # Importante: salimos aquí para no ejecutar el resto
+        page_public_ingress_level0()
+        return   # ← Muy importante: detenemos la ejecución aquí
 
-    # ==================== LÓGICA DE TIMEOUT (solo para usuarios logueados nivel 1) ====================
+    # ==================== LÓGICA DE TIMEOUT: 5 HORAS PARA NIVEL 1 ====================
     if 'logged_in' in st.session_state and st.session_state.level == 1:
         if 'login_timestamp' not in st.session_state:
             st.session_state.login_timestamp = time.time()
@@ -1042,7 +1041,6 @@ def main():
             page_reports()
         elif menu == "👤 Users": 
             page_users()
-
 
 if __name__ == "__main__":
     main()
