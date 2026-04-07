@@ -430,30 +430,14 @@ def page_pending():
     else:
         st.info(f"👑 Administrator Mode - Viendo todas las agencias | 👤 {st.session_state.full_name}")
 
-    # ==================== CONFIGURACIÓN DE COLUMNAS ====================
-    with st.expander("⚙️ Configurar Columnas", expanded=False):
-        st.write("Selecciona y ordena las columnas que deseas ver:")
-        available_cols = [
-            "TAG", "VIN", "Brand", "Model", "Agency", "Responsible", 
-            "Required Day", "Required Time", "Received", "Status", "Time Info", "Urgent"
-        ]
-        
-        saved_cols = get_user_preference(st.session_state.user_id, "pending_cols", 
-                                         default=["TAG", "VIN", "Brand", "Model", "Responsible", "Required Day", "Required Time", "Status", "Time Info"])
-        
-        selected_cols = st.multiselect("Columnas visibles", available_cols, default=saved_cols)
-        
-        if st.button("💾 Guardar Configuración"):
-            save_user_preference(st.session_state.user_id, "pending_cols", selected_cols)
-            st.success("✅ Configuración guardada")
-            st.rerun()
-
+    # ==================== BÚSQUEDA ====================
     col1, col2 = st.columns([3, 1])
     with col1:
         search_term = st.text_input("🔍 Search by VIN or TAG Number", placeholder="Ej: ACURA0005", key="search_pending")
     with col2:
         search_clicked = st.button("🔍 Search")
 
+    # ==================== CONSULTA DB ====================
     with get_db() as conn:
         c = conn.cursor()
         
@@ -505,6 +489,7 @@ def page_pending():
     for v in all_v:
         by_service.setdefault(v['service'], []).append(v)
 
+    # ==================== MOSTRAR POR SERVICIO ====================
     for svc, vehs in by_service.items():
         with st.expander(f"**{svc}** — {len(vehs)} vehículo(s)", expanded=True):
             rows = []
@@ -516,7 +501,10 @@ def page_pending():
                     v['required_time']
                 )
                 
+                # 📌 ORDEN EXACTO SOLICITADO: Complete -> Status -> Resto
                 rows.append({
+                    "Complete": False,
+                    "Status": msg,
                     "TAG": v['tag_number'],
                     "VIN": v['vin_number'] or "-",
                     "Brand": v.get('marca') or "-",
@@ -525,8 +513,7 @@ def page_pending():
                     "Responsible": v['responsible_name'] or "-",
                     "Required Day": v['required_day'] or "-",
                     "Required Time": v['required_time'] or "-",
-                    "Received": v['reception_date'],
-                    "Status": msg,
+                    "Received": v['reception_date'],  # ✅ Visible
                     "Time Info": info,
                     "Urgent": "🚨" if v['is_urgent'] else "",
                     "_color": color,
@@ -535,37 +522,72 @@ def page_pending():
 
             df = pd.DataFrame(rows)
             
-            # Filtrar y reordenar columnas según preferencias del usuario
-            cols_to_show = [col for col in selected_cols if col in df.columns] + ["_color", "_id"]
-            df_display = df[cols_to_show]
+            # Forzar orden de columnas en el DataFrame
+            desired_order = [
+                "Complete", "Status", "TAG", "VIN", "Brand", "Model", 
+                "Agency", "Responsible", "Required Day", "Required Time", 
+                "Received", "Time Info", "Urgent", "_id", "_color"
+            ]
+            df = df[desired_order]
             
-            def highlight_status(row):
-                return [f'background-color: #ffffff; color: #333333; border-left: 5px solid {row["_color"]}'] * len(row)
+            # Configuración de columnas para el Editor
+            column_config = {
+                "Complete": st.column_config.CheckboxColumn(
+                    "Complete", 
+                    help="Marca esta casilla para entregar el vehículo",
+                    default=False
+                ),
+                "Status": st.column_config.TextColumn(disabled=True),
+                "TAG": st.column_config.TextColumn(disabled=True),
+                "VIN": st.column_config.TextColumn(disabled=True),
+                "Brand": st.column_config.TextColumn(disabled=True),
+                "Model": st.column_config.TextColumn(disabled=True),
+                "Agency": st.column_config.TextColumn(disabled=True),
+                "Responsible": st.column_config.TextColumn(disabled=True),
+                "Required Day": st.column_config.TextColumn(disabled=True),
+                "Required Time": st.column_config.TextColumn(disabled=True),
+                "Received": st.column_config.TextColumn(disabled=True), # ✅ Visible y bloqueada
+                "Time Info": st.column_config.TextColumn(disabled=True),
+                "Urgent": st.column_config.TextColumn(disabled=True),
+                "_id": st.column_config.NumberColumn(disabled=True, hidden=True),
+                "_color": st.column_config.TextColumn(disabled=True, hidden=True)
+            }
 
-            styled_df = df_display.style.apply(highlight_status, axis=1).hide(["_color", "_id"], axis=1)
-            st.dataframe(styled_df, hide_index=True, use_container_width=True)
+            # Mostrar Tabla Editable
+            edited_df = st.data_editor(
+                df,
+                column_config=column_config,
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed"
+            )
 
-            cols = st.columns(len(vehs))
-            for i, v in enumerate(vehs):
-                with cols[i]:
-                    label = f"✓ {v['tag_number']}"
-                    if v.get('marca'):
-                        label += f" ({v.get('marca')} {v.get('modelo') or ''})"
-                    
-                    if st.button(label, key=f"deliver_{v['id']}"):
-                        with get_db() as conn2:
-                            c2 = conn2.cursor()
+            # Botón de Acción Masiva
+            if st.button("🚀 Entregar Seleccionados", use_container_width=True, type="primary"):
+                selected_vehicles = edited_df[edited_df["Complete"] == True]
+                
+                if selected_vehicles.empty:
+                    st.warning("⚠️ No has seleccionado ningún vehículo para entregar.")
+                else:
+                    count = 0
+                    with get_db() as conn2:
+                        c2 = conn2.cursor()
+                        dallas_tz = ZoneInfo("America/Chicago")
+                        delivery_time = datetime.now(dallas_tz).strftime("%Y-%m-%d %H:%M")
+                        
+                        for index, row in selected_vehicles.iterrows():
+                            vid = row['_id']
                             c2.execute("""
                                 UPDATE vehicles 
                                 SET status = 'Delivered', 
                                     delivery_date = %s, 
                                     handled_by = %s 
                                 WHERE id = %s
-                            """, (datetime.now().strftime("%Y-%m-%d %H:%M"), 
-                                  st.session_state.username, v['id']))
-                        st.success(f"✅ {v['tag_number']} entregado correctamente")
-                        st.rerun()
-
+                            """, (delivery_time, st.session_state.username, vid))
+                            count += 1
+                    
+                    st.success(f"✅ {count} vehículo(s) entregados correctamente.")
+                    st.rerun()
 def page_reports():
     # 🔒 Restricción de acceso - Solo niveles 2 y 3
     if st.session_state.level < 2:
