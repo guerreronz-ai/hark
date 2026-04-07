@@ -425,23 +425,24 @@ def page_ingress():
 def page_pending():
     st.markdown("<h2>🏎️ Pending Vehicles</h2>", unsafe_allow_html=True)
     
+    # Mensaje de estado
     if st.session_state.level < 3:
         st.info(f"📍 Agency: **{st.session_state.branch_name}** | 👤 {st.session_state.full_name}")
     else:
         st.info(f"👑 Administrator Mode - Viendo todas las agencias | 👤 {st.session_state.full_name}")
 
-    # ==================== BÚSQUEDA ====================
+    # ==================== BÚSQUEDA FUNCIONAL ====================
     col1, col2 = st.columns([3, 1])
     with col1:
         search_term = st.text_input("🔍 Search by VIN or TAG Number", placeholder="Ej: ACURA0005", key="search_pending")
     with col2:
         search_clicked = st.button("🔍 Search")
 
-    # ==================== CONSULTA DB ====================
+    # ==================== CONSULTA A LA BASE DE DATOS ====================
     with get_db() as conn:
         c = conn.cursor()
         
-        if st.session_state.level < 3:
+        if st.session_state.level < 3:   # Nivel 1 y 2 → Solo su agencia
             base_query = """
                 SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, b.name as agency_name,
                        v.service, v.reception_date, v.required_day, v.required_time, 
@@ -451,6 +452,7 @@ def page_pending():
                 WHERE v.status = 'Pending' 
                   AND v.branch_id = %s
             """
+            # Lógica de búsqueda
             if search_term:
                 base_query += " AND (v.vin_number ILIKE %s OR v.tag_number ILIKE %s)"
                 params = (st.session_state.branch_id, f"%{search_term}%", f"%{search_term}%")
@@ -458,7 +460,8 @@ def page_pending():
                 params = (st.session_state.branch_id,)
             
             base_query += " ORDER BY v.service, v.is_urgent DESC, v.reception_date ASC"
-        else:
+            
+        else:                            # Nivel 3 (Admin) → Todas las agencias
             base_query = """
                 SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, b.name as agency_name,
                        v.service, v.reception_date, v.required_day, v.required_time, 
@@ -467,6 +470,7 @@ def page_pending():
                 LEFT JOIN branches b ON v.branch_id = b.id
                 WHERE v.status = 'Pending'
             """
+            # Lógica de búsqueda
             if search_term:
                 base_query += " AND (v.vin_number ILIKE %s OR v.tag_number ILIKE %s)"
                 params = (f"%{search_term}%", f"%{search_term}%")
@@ -485,11 +489,12 @@ def page_pending():
             st.info("📭 No hay vehículos pendientes.")
         return
 
+    # ==================== AGRUPACIÓN POR SERVICIO ====================
     by_service = {}
     for v in all_v:
         by_service.setdefault(v['service'], []).append(v)
 
-    # ==================== MOSTRAR POR SERVICIO ====================
+    # ==================== MOSTRAR POR SERVICIO CON CHECKBOX ====================
     for svc, vehs in by_service.items():
         with st.expander(f"**{svc}** — {len(vehs)} vehículo(s)", expanded=True):
             rows = []
@@ -501,10 +506,10 @@ def page_pending():
                     v['required_time']
                 )
                 
-                # 📌 ORDEN EXACTO SOLICITADO: Complete -> Status -> Resto
+                # 📌 ORDEN SOLICITADO: Complete -> Status -> Resto
                 rows.append({
-                    "Complete": False,
-                    "Status": msg,
+                    "Complete": False,          # Checkbox
+                    "Status": msg,              # Estatus visible
                     "TAG": v['tag_number'],
                     "VIN": v['vin_number'] or "-",
                     "Brand": v.get('marca') or "-",
@@ -513,16 +518,16 @@ def page_pending():
                     "Responsible": v['responsible_name'] or "-",
                     "Required Day": v['required_day'] or "-",
                     "Required Time": v['required_time'] or "-",
-                    "Received": v['reception_date'],  # ✅ Visible
+                    "Received": v['reception_date'],  # Fecha de recepción visible
                     "Time Info": info,
                     "Urgent": "🚨" if v['is_urgent'] else "",
-                    "_color": color,
-                    "_id": v['id']
+                    "_color": color,            # Oculto
+                    "_id": v['id']              # Oculto
                 })
 
             df = pd.DataFrame(rows)
             
-            # Forzar orden de columnas en el DataFrame
+            # Forzar el orden exacto de las columnas
             desired_order = [
                 "Complete", "Status", "TAG", "VIN", "Brand", "Model", 
                 "Agency", "Responsible", "Required Day", "Required Time", 
@@ -530,7 +535,7 @@ def page_pending():
             ]
             df = df[desired_order]
             
-            # Configuración de columnas para el Editor
+            # Configuración para st.data_editor (Interactivo)
             column_config = {
                 "Complete": st.column_config.CheckboxColumn(
                     "Complete", 
@@ -546,7 +551,7 @@ def page_pending():
                 "Responsible": st.column_config.TextColumn(disabled=True),
                 "Required Day": st.column_config.TextColumn(disabled=True),
                 "Required Time": st.column_config.TextColumn(disabled=True),
-                "Received": st.column_config.TextColumn(disabled=True), # ✅ Visible y bloqueada
+                "Received": st.column_config.TextColumn(disabled=True),
                 "Time Info": st.column_config.TextColumn(disabled=True),
                 "Urgent": st.column_config.TextColumn(disabled=True),
                 "_id": st.column_config.NumberColumn(disabled=True, hidden=True),
@@ -562,8 +567,9 @@ def page_pending():
                 num_rows="fixed"
             )
 
-            # Botón de Acción Masiva
+            # Botón único de acción masiva
             if st.button("🚀 Entregar Seleccionados", use_container_width=True, type="primary"):
+                # Filtrar filas donde se marcó el checkbox
                 selected_vehicles = edited_df[edited_df["Complete"] == True]
                 
                 if selected_vehicles.empty:
