@@ -425,7 +425,6 @@ def page_ingress():
 def page_pending():
     st.markdown("<h2>🏎️ Pending Vehicles</h2>", unsafe_allow_html=True)
     
-    # Mensaje superior según el nivel del usuario
     if st.session_state.level < 3:
         st.info(f"📍 Agency: **{st.session_state.branch_name}** | 👤 {st.session_state.full_name}")
     else:
@@ -435,13 +434,12 @@ def page_pending():
     with col1:
         search_term = st.text_input("🔍 Search by VIN or TAG Number", placeholder="Ej: ACURA0005", key="search_pending")
     with col2:
-        search_clicked = st.button("🔍 Search")
+        search_clicked = st.button("🔍 Search", key="btn_search_pending")
 
-    # ====================== CONSULTA A LA BASE DE DATOS ======================
     with get_db() as conn:
         c = conn.cursor()
         
-        if st.session_state.level < 3:   # Nivel 1 y 2 → Solo su agencia
+        if st.session_state.level < 3:
             base_query = """
                 SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, b.name as agency_name,
                        v.service, v.reception_date, v.required_day, v.required_time, 
@@ -451,7 +449,6 @@ def page_pending():
                 WHERE v.status = 'Pending' 
                   AND v.branch_id = %s
             """
-            # Agregar filtro de búsqueda si existe
             if search_term:
                 base_query += " AND (v.vin_number ILIKE %s OR v.tag_number ILIKE %s)"
                 params = (st.session_state.branch_id, f"%{search_term}%", f"%{search_term}%")
@@ -459,7 +456,7 @@ def page_pending():
                 params = (st.session_state.branch_id,)
             
             base_query += " ORDER BY v.service, v.is_urgent DESC, v.reception_date ASC"
-        else:                            # Nivel 3 (Admin) → Todas las agencias
+        else:
             base_query = """
                 SELECT v.id, v.tag_number, v.vin_number, v.marca, v.modelo, b.name as agency_name,
                        v.service, v.reception_date, v.required_day, v.required_time, 
@@ -468,7 +465,6 @@ def page_pending():
                 LEFT JOIN branches b ON v.branch_id = b.id
                 WHERE v.status = 'Pending'
             """
-            # Agregar filtro de búsqueda si existe
             if search_term:
                 base_query += " AND (v.vin_number ILIKE %s OR v.tag_number ILIKE %s)"
                 params = (f"%{search_term}%", f"%{search_term}%")
@@ -487,17 +483,14 @@ def page_pending():
             st.info("📭 No hay vehículos pendientes.")
         return
 
-    # ====================== AGRUPACIÓN POR SERVICIO ======================
     by_service = {}
     for v in all_v:
         by_service.setdefault(v['service'], []).append(v)
 
-    # ====================== MOSTRAR POR SERVICIO ======================
     for svc, vehs in by_service.items():
         with st.expander(f"**{svc}** — {len(vehs)} vehículo(s)", expanded=True):
             rows = []
             for v in vehs:
-                # Aplicamos las nuevas reglas de colores y mensajes
                 color, msg, info = get_status_info(
                     v['service'], 
                     v['reception_date'], 
@@ -505,10 +498,9 @@ def page_pending():
                     v['required_time']
                 )
                 
-                # 📌 ORDEN SOLICITADO: Complete -> Status -> TAG -> VIN -> ... -> Received
                 rows.append({
-                    "Complete": False,          # ✅ Checkbox al inicio
-                    "Status": msg,              # ✅ Estatus en segunda posición
+                    "Complete": False,
+                    "Status": msg,
                     "TAG": v['tag_number'],
                     "VIN": v['vin_number'] or "-",
                     "Brand": v.get('marca') or "-",
@@ -517,28 +509,19 @@ def page_pending():
                     "Responsible": v['responsible_name'] or "-",
                     "Required Day": v['required_day'] or "-",
                     "Required Time": v['required_time'] or "-",
-                    "Received": v['reception_date'],  # ✅ Visible
+                    "Received": v['reception_date'],
                     "Time Info": info,
                     "Urgent": "🚨" if v['is_urgent'] else "",
-                    "_color": color,            # Columna interna (se oculta después)
-                    "_id": v['id']              # Columna interna (se oculta después)
+                    "_id": v['id'],
+                    "_color": color
                 })
 
             df = pd.DataFrame(rows)
             
-            # Forzar orden de columnas
-            desired_order = [
-                "Complete", "Status", "TAG", "VIN", "Brand", "Model", 
-                "Agency", "Responsible", "Required Day", "Required Time", 
-                "Received", "Time Info", "Urgent", "_color", "_id"
-            ]
-            df = df[desired_order]
-            
-            # Configuración de columnas para el Editor
             column_config = {
                 "Complete": st.column_config.CheckboxColumn(
                     "Complete", 
-                    help="Marca esta casilla para entregar el vehículo",
+                    help="Marca para entregar",
                     default=False
                 ),
                 "Status": st.column_config.TextColumn(disabled=True),
@@ -550,28 +533,25 @@ def page_pending():
                 "Responsible": st.column_config.TextColumn(disabled=True),
                 "Required Day": st.column_config.TextColumn(disabled=True),
                 "Required Time": st.column_config.TextColumn(disabled=True),
-                "Received": st.column_config.TextColumn(disabled=True),  # ✅ Visible
+                "Received": st.column_config.TextColumn(disabled=True),
                 "Time Info": st.column_config.TextColumn(disabled=True),
                 "Urgent": st.column_config.TextColumn(disabled=True),
-                # ❌ NO configuramos _color y _id para que no aparezcan
             }
 
-            # Mostrar Tabla Editable (excluyendo columnas internas)
             edited_df = st.data_editor(
-                df.drop(columns=['_color', '_id']),  # ✅ Ocultar columnas internas
+                df.drop(columns=['_id', '_color']),
                 column_config=column_config,
                 hide_index=True,
                 use_container_width=True,
-                num_rows="fixed"
+                num_rows="fixed",
+                key=f"editor_{svc.replace(' ', '_')}"
             )
 
-            # ====================== BOTÓN DE ENTREGA MASIVA ======================
-            if st.button("🚀 Entregar Seleccionados", use_container_width=True, type="primary"):
-                # Necesitamos cruzar los IDs originales
-                selected_indices = edited_df[edited_df["Complete"] == True].index.tolist()
+            if st.button("🚀 Entregar Seleccionados", key=f"btn_deliver_{svc.replace(' ', '_')}", use_container_width=True, type="primary"):
+                selected_rows = edited_df[edited_df["Complete"] == True]
                 
-                if not selected_indices:
-                    st.warning("⚠️ No has seleccionado ningún vehículo para entregar.")
+                if selected_rows.empty:
+                    st.warning("⚠️ No has seleccionado ningún vehículo.")
                 else:
                     count = 0
                     with get_db() as conn2:
@@ -579,15 +559,13 @@ def page_pending():
                         dallas_tz = ZoneInfo("America/Chicago")
                         delivery_time = datetime.now(dallas_tz).strftime("%Y-%m-%d %H:%M")
                         
-                        for idx in selected_indices:
-                            vid = df.loc[idx, '_id']  # Obtener ID original del df completo
+                        for idx in selected_rows.index:
+                            original_id = df.loc[idx, '_id']
                             c2.execute("""
                                 UPDATE vehicles 
-                                SET status = 'Delivered', 
-                                    delivery_date = %s, 
-                                    handled_by = %s 
+                                SET status = 'Delivered', delivery_date = %s, handled_by = %s 
                                 WHERE id = %s
-                            """, (delivery_time, st.session_state.username, vid))
+                            """, (delivery_time, st.session_state.username, original_id))
                             count += 1
                     
                     st.success(f"✅ {count} vehículo(s) entregados correctamente.")
