@@ -310,22 +310,23 @@ def login_page():
                 """, (username, hashed))
                 
                 user = c.fetchone()
-
-        if user:
-            st.session_state.update({
-                "logged_in": True,
-                "login_timestamp": time.time(),  # ⏰ Guardamos la hora del login
-                "user_id": user['id'],
-                "username": user['username'],
-                "level": user['level'],
-                "branch_id": user['branch_id'],
-                "branch_name": user['branch_name'],
-                "full_name": user['full_name']
-            })
-            st.success(f"✅ Welcome, {user['full_name']}")
-            st.rerun()
-        else:
-            st.error("❌ Invalid credentials")
+            
+            # ✅ IMPORTANTE: Esta validación debe ir DENTRO del bloque del botón
+            if user:
+                st.session_state.update({
+                    "logged_in": True,
+                    "login_timestamp": time.time(),  # ⏰ Guarda la hora del login
+                    "user_id": user['id'],
+                    "username": user['username'],
+                    "level": user['level'],
+                    "branch_id": user['branch_id'],
+                    "branch_name": user['branch_name'],
+                    "full_name": user['full_name']
+                })
+                st.success(f"✅ Welcome, {user['full_name']}")
+                st.rerun()
+            else:
+                st.error("❌ Invalid credentials")
         
 def page_ingress():
     st.markdown("<h2>🚦 Vehicle Ingress</h2>", unsafe_allow_html=True)
