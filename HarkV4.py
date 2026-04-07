@@ -428,7 +428,7 @@ def page_pending():
     if st.session_state.level < 3:
         st.info(f"📍 Agency: **{st.session_state.branch_name}** | 👤 {st.session_state.full_name}")
     else:
-        st.info(f"👑 Administrator Mode - Viendo todas las agencias | 👤 {st.session_state.full_name}")
+        st.info(f"👑 Administrator Mode - Viewing all agencies | 👤 {st.session_state.full_name}")
 
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -578,7 +578,7 @@ def page_reports():
         st.stop()
 
     st.markdown("<h2>📊 Reports & Statistics</h2>", unsafe_allow_html=True)
-    st.subheader("🔎 Filtros Avanzados")
+    st.subheader("🔎 Advanced Filters")
 
     with get_db() as conn:
         c = conn.cursor()
@@ -603,7 +603,7 @@ def page_reports():
         else:
             branch_id_filter = st.session_state.branch_id
 
-    if st.button("🔄 Actualizar Reportes", type="primary"):
+    if st.button("🔄 Update Reports", type="primary"):
         st.rerun()
 
     with get_db() as conn:
@@ -698,7 +698,7 @@ def page_reports():
     # ==========================================
     if st.session_state.level >= 2:
         st.divider()
-        st.subheader("↩️ Revertir Entregas (Corrección de Errores)")
+        st.subheader("↩️ Reverting Deliveries (Error Correction))")
         st.caption("⚠️ This action will return the vehicle to 'Pending' and clear the delivery date.")
 
         rev_query = """
@@ -734,7 +734,7 @@ def page_reports():
                 f"{v['tag_number']} | {v['marca']} {v['modelo']} (Entregado: {v['delivery_date']})": v['id'] 
                 for v in delivered_list
             }
-            selected_vehicle = st.selectbox("📍 SSelect the vehicle to reverse:", list(vehicle_options.keys()), index=None)
+            selected_vehicle = st.selectbox("📍 Select the vehicle to reverse:", list(vehicle_options.keys()), index=None)
             
             confirm_revert = st.checkbox("✅ I confirm that I wish to revert this submission to Pending")
 
@@ -816,7 +816,7 @@ def page_users():
         st.dataframe(df, hide_index=True, use_container_width=True)
 
         st.divider()
-        st.subheader("🔧 Gestión de Usuarios")
+        st.subheader("🔧 User Management")
         
         col1, col2 = st.columns(2)
         
