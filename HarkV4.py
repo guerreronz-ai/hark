@@ -842,6 +842,62 @@ def page_users():
                 st.info("ℹ️ There are no other users to delete.")
     else:
         st.info("📭 There are no registered users.")
+
+    # ==========================================
+    # 🏢 GESTIÓN DE AGENCIAS (Solo Admin)
+    # ==========================================
+    st.divider()
+    st.subheader("🏢 Agency Management")
+    with st.expander("✏️ Edit Agency Names & Status", expanded=False):
+        with get_db() as conn:
+            c = conn.cursor()
+            c.execute("SELECT id, name, active FROM branches ORDER BY id")
+            branches = c.fetchall()
+
+        if branches:
+            for b in branches:
+                col_a, col_b, col_c = st.columns([4, 2, 1])
+                
+                with col_a:
+                    new_name = st.text_input(
+                        f"Agency #{b['id']}", 
+                        value=b['name'], 
+                        key=f"branch_name_{b['id']}"
+                    )
+                    
+                with col_b:
+                    if st.button("💾 Update Name", key=f"upd_branch_{b['id']}"):
+                        new_name_clean = new_name.strip()
+                        if not new_name_clean:
+                            st.warning("❌ Name cannot be empty.")
+                        elif new_name_clean == b['name']:
+                            st.info("ℹ️ Name unchanged.")
+                        else:
+                            try:
+                                with get_db() as conn2:
+                                    c2 = conn2.cursor()
+                                    c2.execute("UPDATE branches SET name = %s WHERE id = %s", (new_name_clean, b['id']))
+                                st.success(f"✅ Renamed: '{b['name']}' → '{new_name_clean}'")
+                                st.rerun()
+                            except Exception as e:
+                                err = str(e).lower()
+                                if "duplicate key" in err or "unique" in err:
+                                    st.error(f"❌ Name '{new_name_clean}' already exists.")
+                                else:
+                                    st.error(f"❌ DB Error: {e}")
+                                    
+                with col_c:
+                    is_active = b['active'] == 1
+                    new_active = st.checkbox("Active", value=is_active, key=f"branch_act_{b['id']}")
+                    if st.button("💾 Status", key=f"stat_branch_{b['id']}"):
+                        if new_active != is_active:
+                            with get_db() as conn2:
+                                c2 = conn2.cursor()
+                                c2.execute("UPDATE branches SET active = %s WHERE id = %s", (1 if new_active else 0, b['id']))
+                            st.success(f"✅ Status updated for {b['name']}")
+                            st.rerun()
+        else:
+            st.info("📭 No agencies found in database.")
 #==================================GUESS=========================================
 def page_public_ingress_level0():
     st.markdown("<h1 style='text-align:center; color:#00d4ff;'>🚦 Vehicle Entrance</h1>", unsafe_allow_html=True)
