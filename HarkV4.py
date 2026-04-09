@@ -19,7 +19,11 @@ st.set_page_config(
     page_icon="🦈",
     initial_sidebar_state="expanded"
 )
-
+# ==================== LOGO HARK ====================
+st.logo(
+    "hark_logo.png",          # ← Debe coincidir exactamente con el nombre en GitHub
+    size="large"
+)
 # ==================== CSS Profesional ====================
 st.markdown("""
 <style>
