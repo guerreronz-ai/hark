@@ -15,7 +15,7 @@ import os
 st.set_page_config(
     page_title="HARK - Management System",
     layout="wide",
-    page_icon="🦈",
+    page_icon="hark_logo.ico",
     initial_sidebar_state="expanded"
 )
 
