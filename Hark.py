@@ -210,10 +210,10 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
         except ValueError:
             rec_date = datetime.strptime(reception_str, "%Y-%m-%d %H:%M")
         rec_date = rec_date.replace(tzinfo=dallas_tz)
-        
+
         if service_clean == "Service Wash":
             hours_since_reception = (now_dallas - rec_date).total_seconds() / 3600
-            if hours_since_reception < 0.17:
+            if hours_since_reception < 0.16:
                 return "#28a745", "✅ On Time", f"{hours_since_reception:.1f}h since reception"
             elif hours_since_reception < 0.33:
                 return "#ffc107", "⚠️ Attention", f"{hours_since_reception:.1f}h since reception"
@@ -231,8 +231,7 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
         
         hours_since_reception = (now_dallas - rec_date).total_seconds() / 3600
         hours_until_deadline = (req_date - now_dallas).total_seconds() / 3600
-
-        
+      
         if service_clean == "Full Detail for line":
             hours_since_reception = (now_dallas - rec_date).total_seconds() / 3600
             if hours_since_reception < 24:
