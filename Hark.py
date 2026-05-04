@@ -213,9 +213,9 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
         
         if service_clean == "Service Wash":
             hours_since_reception = (now_dallas - rec_date).total_seconds() / 3600
-            if hours_since_reception < 0.01:
+            if hours_since_reception < 0.17:
                 return "#28a745", "✅ On Time", f"{hours_since_reception:.1f}h since reception"
-            elif hours_since_reception < 0.17:
+            elif hours_since_reception < 0.33:
                 return "#ffc107", "⚠️ Attention", f"{hours_since_reception:.1f}h since reception"
             else:
                 return "#dc3545", "🚨 Delayed", f"{hours_since_reception:.1f}h since reception"
