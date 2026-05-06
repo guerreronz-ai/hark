@@ -11,36 +11,23 @@ from contextlib import contextmanager
 from io import BytesIO
 import os
 
-# ==================== CONFIGURACIÓN VISUAL PROFESIONAL ====================
+# ==================== CONFIGURACIÓN VISUAL ====================
 st.set_page_config(
     page_title="HARK - Management System",
     layout="wide",
-    page_icon="hark_logo.png",   # Cambiado a .png
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': None,
-        'About': "HARK Management System"
-    }
+    page_icon="hark_logo.png",  
+    initial_sidebar_state="expanded"
 )
 
+# Soporte mejorado para iOS + PC + Android
 st.markdown("""
-    <link rel="apple-touch-icon" sizes="180x180" href="hark_logo.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="HARK">
-    <meta name="theme-color" content="#00d4ff">
-    <style>
-        @media (prefers-color-scheme: dark) {
-            .stApp { background-color: #0f172a !important; }
-        }
-    </style>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#00a8e8">
+    <link rel="apple-touch-icon" sizes="512x512" href="hark_logo.png">
 """, unsafe_allow_html=True)
-# ==================== LOGO HARK ====================
-st.logo(
-    "hark_logo.png",
-    size="large"
-)
+
+st.logo("hark_logo.png", size="large")
 
 # ==================== CSS Profesional ====================
 st.markdown("""
@@ -389,6 +376,17 @@ def page_ingress():
             
 def page_pending():
     st.markdown("<h2>🏎️ Pending Vehicles</h2>", unsafe_allow_html=True)
+    
+    if "last_pending_refresh" not in st.session_state:
+        st.session_state.last_pending_refresh = time.time()
+    
+    seconds_ago = int(time.time() - st.session_state.last_pending_refresh)
+    st.caption(f"🔄 Auto-refresh activado • Última actualización hace **{seconds_ago}** segundos")
+    
+    if st.button("🔄 Actualizar Ahora", type="secondary"):
+        st.session_state.last_pending_refresh = time.time()
+        st.rerun()
+
     if st.session_state.level < 3:
         st.info(f"📍 Agency: {st.session_state.branch_name} | 👤 {st.session_state.full_name}")
     else:
@@ -433,9 +431,12 @@ def page_pending():
 
     if not all_v:
         st.warning(f"No pending vehicles were found that matched '{search_term}'" if search_term else "There are no pending vehicles.")
+        # Auto refresh igual
+        if time.time() - st.session_state.last_pending_refresh > 60:
+            st.session_state.last_pending_refresh = time.time()
+            st.rerun()
         return
 
-    # Servicios sin fecha/hora requerida
     NO_REQUIRED_SERVICES = ["Service Wash", "Loaner", "Photo", "Show Room", "Full Detail for line"]
 
     by_service = {}
@@ -466,7 +467,6 @@ def page_pending():
 
             df = pd.DataFrame(rows)
 
-            # ==================== ORDEN DE COLUMNAS ====================
             if svc in NO_REQUIRED_SERVICES:
                 column_order = [
                     "Complete", "Status", "Urgent", "TAG", "VIN", 
@@ -537,6 +537,10 @@ def page_pending():
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
 
+    if time.time() - st.session_state.last_pending_refresh > 60:
+        st.session_state.last_pending_refresh = time.time()
+        st.rerun()
+        
 def page_reports():
     if 'logged_in' not in st.session_state or 'level' not in st.session_state:
         st.error("🚫 Session expired. Please login again.")
@@ -1065,6 +1069,7 @@ def page_public_ingress_level0():
             st.rerun()
 
 #======================== STATISTICS  =========================================
+
 def page_statistics():
     if st.session_state.level < 2:
         st.error("🚫 Access denied. Only Supervisors and Administrators.")
@@ -1091,11 +1096,7 @@ def page_statistics():
     
     with col2:
         period = st.selectbox("📅 Period", [
-            "Today", 
-            "Last 7 Days", 
-            "Last 30 Days", 
-            "This Month", 
-            "All Time"
+            "Today", "Last 7 Days", "Last 30 Days", "This Month", "All Time"
         ], key="stat_period")
 
     if st.button("🔄 Update Charts", type="primary"):
@@ -1114,12 +1115,10 @@ def page_statistics():
             """
             params = []
 
-            # Filtro por agencia
             if branch_filter is not None:
                 query += " AND branch_id = %s"
                 params.append(branch_filter)
 
-            # Filtro por período
             if period == "Today":
                 query += " AND DATE(reception_date::timestamp) = CURRENT_DATE"
             elif period == "Last 7 Days":
@@ -1144,34 +1143,46 @@ def page_statistics():
         # Métricas
         total = df['count'].sum()
         pending = df[df['status'] == 'Pending']['count'].sum() if not df.empty else 0
-        delivered = df[df['status'] == 'Delivered']['count'].sum() if not df.empty else 0
+        done = df[df['status'] == 'Delivered']['count'].sum() if not df.empty else 0
 
         col_a, col_b, col_c, col_d = st.columns(4)
         col_a.metric("📊 Total Vehicles", f"{total:,}")
         col_b.metric("⏳ Pending", f"{pending:,}")
-        col_c.metric("✅ Delivered", f"{delivered:,}")
-        col_d.metric("🎯 Completion Rate", f"{(delivered/total*100):.1f}%" if total > 0 else "0%")
+        col_c.metric("✅ Done", f"{done:,}")
+        col_d.metric("🎯 Completion Rate", f"{(done/total*100):.1f}%" if total > 0 else "0%")
 
         st.divider()
 
-        # Gráficos
+        # Gráfico 1: Por Servicio
         st.subheader("📊 Vehicles by Service")
         service_total = df.groupby('service')['count'].sum().reset_index()
         fig1 = px.bar(service_total, x='service', y='count', color='service', text='count')
         fig1.update_traces(textposition='outside')
         st.plotly_chart(fig1, use_container_width=True)
 
-        st.subheader("✅ Pending vs Delivered")
-        status_total = df.groupby('status')['count'].sum().reset_index()
+        # Gráfico 2: Pending vs Done (3D Pie)
+        st.subheader("✅ Pending vs Done")
+        status_total = pd.DataFrame({
+            'status': ['Pending', 'Done'],
+            'count': [pending, done]
+        })
         fig2 = px.pie(status_total, names='status', values='count',
-                      color_discrete_sequence=['#ff9800', '#4caf50'])
+                      color='status',
+                      color_discrete_map={'Pending': '#ffc107', 'Done': '#28a745'},
+                      title="Pending vs Done",
+                      hole=0.3)  # Para efecto 3D
+        
+        # Efecto 3D más pronunciado
+        fig2.update_traces(textinfo='percent+label', pull=[0.1, 0.1])
         st.plotly_chart(fig2, use_container_width=True)
 
+        # Gráfico 3: Tendencia Diaria
         st.subheader("📅 Daily Activity Trend")
         daily = df.groupby(['date', 'status'])['count'].sum().reset_index()
         fig3 = px.line(daily, x='date', y='count', color='status', markers=True)
         st.plotly_chart(fig3, use_container_width=True)
 
+        # Tabla resumen
         st.subheader("📋 Detailed Summary")
         summary = df.groupby(['service', 'status']).agg({'count': 'sum'}).reset_index()
         st.dataframe(summary.sort_values('count', ascending=False), use_container_width=True, hide_index=True)
