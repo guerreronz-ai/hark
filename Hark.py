@@ -160,8 +160,9 @@ for h in range(24):
         TIME_12H_OPTIONS.append(dt_obj.strftime("%I:%M %p"))
 
 SERVICES_LIST = [
-    "Full Detail the customer", "Zaktek", "Sold Detail", "Sold use car", "Sold new car",
     "Service Wash", "Loaner", "Photo", "Show Room", "Full Detail for line",
+    "Full Detail the customer", "Zaktek", "Sold Detail", "Sold use car", "Sold new car",
+    
 ]
 SERVICE_FIELD_REQUIREMENTS = {
     "Service Wash": "tag",
@@ -259,6 +260,33 @@ def get_status_info(service, reception_str, req_day_str, req_time_str):
 
     except Exception:
         return "#6c757d", "⚠️ Error", "-"
+
+def is_future_datetime(req_day, req_time):
+    """Valida fecha/hora futura + cutoff 9:00 PM"""
+    if not req_day or not req_time:
+        return True
+    
+    dallas_tz = ZoneInfo("America/Chicago")
+    now = datetime.now(dallas_tz)
+    
+    try:
+        req_str = f"{req_day} {req_time}"
+        req_dt = datetime.strptime(req_str, "%Y-%m-%d %I:%M %p")
+        req_dt = req_dt.replace(tzinfo=dallas_tz)
+
+        # Si es para HOY
+        if req_dt.date() == now.date():
+            cutoff = now.replace(hour=21, minute=0, second=0, microsecond=0)
+            if now >= cutoff:
+                return False  # Después de 9 PM no se permite hoy
+            return req_dt > now   # Solo horas futuras
+
+        # Días futuros → siempre permitido
+        return req_dt > now
+
+    except:
+        return False
+        
 # ==================== PÁGINAS ====================
 def login_page():
     st.markdown("<h1 style='text-align:center; color:#00d4ff;'>🦈 HARK Login</h1>", unsafe_allow_html=True)
@@ -304,8 +332,8 @@ def page_ingress():
     
     NO_REQUIRED_SERVICES = ["Service Wash", "Loaner", "Photo", "Show Room", "Full Detail for line"]
 
-    # Service fuera del form para que se actualice correctamente
-    service = st.selectbox("Service", SERVICES_LIST, key="service_sel")
+    # Service fuera del form
+    service = st.selectbox("⚠️ Service (Select the required service)⚠️", SERVICES_LIST, key="service_sel")
 
     with st.form("ingress_form", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
@@ -336,6 +364,19 @@ def page_ingress():
         urgent = st.checkbox("🚨 Waiting Customer")
         
         if st.form_submit_button("💾 Save Vehicle", use_container_width=True, type="primary"):
+            
+            # ====================== VALIDACIÓN FECHA/HORA ======================
+            if service not in NO_REQUIRED_SERVICES:
+                if not is_future_datetime(req_day, req_time):   # ← Solo 2 argumentos
+                    now = datetime.now(ZoneInfo("America/Chicago"))
+                    if now.hour >= 21:
+                        st.error("❌ *Después de las 9:00 PM* no se pueden registrar vehículos para hoy.\nSolo se permite programar para *mañana* o fecha posterior.")
+                    else:
+                        st.error("❌ No se puede programar en el pasado.\nLa fecha y hora requerida debe ser futura.")
+                    st.stop()
+            
+            
+            # ====================== VALIDACIONES DE CAMPOS ======================
             if req_type == "both" and (not vin.strip() or not tag.strip()):
                 st.error("❌ This service requires both VIN and TAG"); st.stop()
             elif req_type == "vin" and not vin.strip():
@@ -343,6 +384,7 @@ def page_ingress():
             elif req_type == "tag" and not tag.strip():
                 st.error("❌ This service requires a TAG Number"); st.stop()
             
+            # ====================== GUARDAR EN BASE DE DATOS ======================
             dallas_tz = ZoneInfo("America/Chicago")
             dallas_now = datetime.now(dallas_tz).strftime("%Y-%m-%d %I:%M %p")
             check_val = (vin if req_type in ["vin", "both"] else tag).strip().upper()
@@ -996,8 +1038,7 @@ def page_public_ingress_level0():
     
     NO_REQUIRED_SERVICES = ["Service Wash", "Loaner", "Photo", "Show Room", "Full Detail for line"]
 
-    # Service fuera del form
-    service = st.selectbox("Service", SERVICES_LIST, key="guest_service")
+    service = st.selectbox("⚠️ Service (Select the required service)⚠️", SERVICES_LIST, key="guest_service")
 
     with st.form("guest_ingress_form", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
@@ -1028,6 +1069,18 @@ def page_public_ingress_level0():
         urgent = st.checkbox("🚨 Waiting Customer")
 
         if st.form_submit_button("💾 Save Vehicle", use_container_width=True, type="primary"):
+            
+            # ====================== VALIDACIÓN FECHA/HORA ======================
+            if service not in NO_REQUIRED_SERVICES:
+                if not is_future_datetime(req_day, req_time):
+                    now = datetime.now(ZoneInfo("America/Chicago"))
+                    if now.hour >= 21:
+                        st.error("❌ *Después de las 9:00 PM* no se pueden registrar vehículos para hoy.\nSolo se permite programar para *mañana* o fecha posterior.")
+                    else:
+                        st.error("❌ No se puede programar en el pasado.\nLa fecha y hora requerida debe ser futura.")
+                    st.stop()
+            
+            # ====================== VALIDACIONES DE CAMPOS ======================
             if req_type == "both" and (not vin.strip() or not tag.strip()): 
                 st.error("❌ This service requires VIN and TAG"); st.stop()
             elif req_type == "vin" and not vin.strip(): 
@@ -1035,6 +1088,7 @@ def page_public_ingress_level0():
             elif req_type == "tag" and not tag.strip(): 
                 st.error("❌ This service requires TAG"); st.stop()
 
+            # ====================== GUARDAR ======================
             dallas_now = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %I:%M %p")
             with get_db() as conn:
                 c = conn.cursor()
@@ -1068,11 +1122,11 @@ def page_public_ingress_level0():
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
-#======================== STATISTICS  =========================================
-
+# ====================== STATISTICS ======================
 def page_statistics():
-    if st.session_state.level < 2:
-        st.error("🚫 Access denied. Only Supervisors and Administrators.")
+    if st.session_state.level != 3:   # Solo Administradores (level 3)
+        st.error("🚫 Access denied. Only Administrators can view Statistics.")
+        st.info("Esta sección está disponible solo para Administradores.")
         return
 
     st.markdown("<h2>📈 Statistics & Charts</h2>", unsafe_allow_html=True)
@@ -1107,9 +1161,17 @@ def page_statistics():
             c = conn.cursor()
             
             query = """
-                SELECT service, status, 
-                       DATE(reception_date::timestamp) as date, 
-                       COUNT(*) as count
+                SELECT 
+                    service, 
+                    status, 
+                    COUNT(*) as count,
+                    AVG(
+                        CASE 
+                            WHEN status = 'Delivered' 
+                            THEN EXTRACT(EPOCH FROM (delivery_date::timestamp - reception_date::timestamp)) / 60 
+                            ELSE NULL 
+                        END
+                    ) as avg_minutes
                 FROM vehicles 
                 WHERE 1=1
             """
@@ -1128,7 +1190,7 @@ def page_statistics():
             elif period == "This Month":
                 query += " AND DATE_TRUNC('month', reception_date::timestamp) = DATE_TRUNC('month', CURRENT_DATE)"
 
-            query += " GROUP BY service, status, date ORDER BY date"
+            query += " GROUP BY service, status ORDER BY count DESC"
             
             c.execute(query, params)
             data = c.fetchall()
@@ -1137,58 +1199,99 @@ def page_statistics():
             st.info("📭 No data found for the selected period.")
             return
 
-        df = pd.DataFrame(data)
-        import plotly.express as px
+        df = pd.DataFrame(data, columns=['service', 'status', 'count', 'avg_minutes'])
 
-        # Métricas
+        # ==================== MÉTRICAS ====================
         total = df['count'].sum()
         pending = df[df['status'] == 'Pending']['count'].sum() if not df.empty else 0
-        done = df[df['status'] == 'Delivered']['count'].sum() if not df.empty else 0
+        delivered = df[df['status'] == 'Delivered']['count'].sum() if not df.empty else 0
 
         col_a, col_b, col_c, col_d = st.columns(4)
         col_a.metric("📊 Total Vehicles", f"{total:,}")
         col_b.metric("⏳ Pending", f"{pending:,}")
-        col_c.metric("✅ Done", f"{done:,}")
-        col_d.metric("🎯 Completion Rate", f"{(done/total*100):.1f}%" if total > 0 else "0%")
+        col_c.metric("✅ Delivered", f"{delivered:,}")
+        col_d.metric("🎯 Completion Rate", f"{(delivered/total*100):.1f}%" if total > 0 else "0%")
 
         st.divider()
 
-        # Gráfico 1: Por Servicio
+        # ==================== FUNCIÓN PARA FORMATO HORAS:MINUTOS ====================
+        def minutes_to_hm(minutes):
+            if pd.isna(minutes):
+                return "-"
+            total_min = round(float(minutes))
+            hours = total_min // 60
+            mins = total_min % 60
+            return f"{hours}:{mins:02d}"
+
+        # ==================== TABLA CON TIEMPO PROMEDIO ====================
+        st.subheader("📋 Detailed Summary")
+        
+        df_display = df.copy()
+        df_display['avg_minutes'] = pd.to_numeric(df_display['avg_minutes'], errors='coerce')
+
+        df_display = df_display.rename(columns={
+            'service': 'Service',
+            'status': 'Status',
+            'avg_minutes': 'Avg Time',
+            'count': 'Count'
+        })
+
+        df_display['Avg Time'] = df_display.apply(
+            lambda x: minutes_to_hm(x['Avg Time']) 
+            if x['Status'] == 'Delivered' else "-", axis=1
+        )
+
+        st.dataframe(
+            df_display[['Service', 'Status', 'Count', 'Avg Time']], 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+        # ==================== GRÁFICOS ====================
+        import plotly.express as px
+
         st.subheader("📊 Vehicles by Service")
         service_total = df.groupby('service')['count'].sum().reset_index()
         fig1 = px.bar(service_total, x='service', y='count', color='service', text='count')
         fig1.update_traces(textposition='outside')
         st.plotly_chart(fig1, use_container_width=True)
 
-        # Gráfico 2: Pending vs Done (3D Pie)
-        st.subheader("✅ Pending vs Done")
-        status_total = pd.DataFrame({
-            'status': ['Pending', 'Done'],
-            'count': [pending, done]
-        })
-        fig2 = px.pie(status_total, names='status', values='count',
-                      color='status',
-                      color_discrete_map={'Pending': '#ffc107', 'Done': '#28a745'},
-                      title="Pending vs Done",
-                      hole=0.3)  # Para efecto 3D
+        # ==================== GRÁFICO PIE MEJORADO ====================
+        st.subheader("✅ Pending vs Delivered")
+        status_total = df.groupby('status')['count'].sum().reset_index()
         
-        # Efecto 3D más pronunciado
-        fig2.update_traces(textinfo='percent+label', pull=[0.1, 0.1])
+        total_vehicles = status_total['count'].sum()
+        
+        status_total['percentage'] = (status_total['count'] / total_vehicles * 100).round(1)
+        
+        fig2 = px.pie(
+            status_total, 
+            names='status', 
+            values='count',
+            color_discrete_sequence=['#ff9800', '#4caf50'],
+            hole=0.08,
+            title=f"Total: {total_vehicles:,} vehicles"
+        )
+        
+        fig2.update_traces(
+            textposition='inside',
+            texttemplate='%{label}<br>%{customdata:.1f}%<br>(%{value:,})',
+            customdata=status_total['percentage'],   # ← Usamos nuestro cálculo manual
+            hovertemplate='<b>%{label}</b><br>%{value:,} vehicles<br>%{customdata:.1f}%<extra></extra>',
+            pull=[0.08 if status == 'Pending' else 0 for status in status_total['status']]
+        )
+        
+        fig2.update_layout(
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+            title_x=0.5,
+            height=520
+        )
+        
         st.plotly_chart(fig2, use_container_width=True)
-
-        # Gráfico 3: Tendencia Diaria
-        st.subheader("📅 Daily Activity Trend")
-        daily = df.groupby(['date', 'status'])['count'].sum().reset_index()
-        fig3 = px.line(daily, x='date', y='count', color='status', markers=True)
-        st.plotly_chart(fig3, use_container_width=True)
-
-        # Tabla resumen
-        st.subheader("📋 Detailed Summary")
-        summary = df.groupby(['service', 'status']).agg({'count': 'sum'}).reset_index()
-        st.dataframe(summary.sort_values('count', ascending=False), use_container_width=True, hide_index=True)
-
+        
     except Exception as e:
-        st.error(f"❌ Error generating charts: {str(e)}")
+        st.error(f"❌ Error generating statistics: {str(e)}")   
         
 # ==================== MAIN ====================
 def main():
@@ -1232,8 +1335,8 @@ def main():
     menu_options = ["🚦 Ingress", "🏎️ Pending"]
     if st.session_state.level >= 2:
         menu_options.append("📊 Reports")
-        menu_options.append("📈 Statistics")
     if st.session_state.level == 3:
+        menu_options.append("📈 Statistics")
         menu_options.append("👤 Users")
     
     menu = st.sidebar.radio("Menu", menu_options)
