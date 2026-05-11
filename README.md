@@ -1,2 +1,3 @@
 # HarkWash
-Version a Prueba con errores corregidos 
+Version Lista para deploy, siguiente agencia.
+
